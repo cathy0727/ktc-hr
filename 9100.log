@@ -1,0 +1,317 @@
+INFO:     Started server process [8492]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9100 (Press CTRL+C to quit)
+INFO:     192.168.0.1:54808 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58863 - "GET /api/hr/me HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54808 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54808 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:63916 - "POST /api/hr/exam/upload HTTP/1.1" 200 OK
+INFO:     192.168.0.1:63916 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:55311 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:55311 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "GET /api/hr/invite/defaults?id=29 HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "GET /api/hr/invite/defaults?id=15 HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:56577 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53748 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52293 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:59598 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54765 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58363 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:51025 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53474 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53474 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53474 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53474 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53474 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:55390 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54611 - "POST /api/hr/exam/upload HTTP/1.1" 200 OK
+INFO:     192.168.0.1:54611 - "GET /api/hr/exam/sets HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64476 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64476 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64476 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64476 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:60661 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:60661 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64540 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:65090 - "GET /api/hr/me HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64540 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:65090 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:65090 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52931 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52931 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52931 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64312 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:64312 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53690 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:53951 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58295 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:51864 - "GET /api/hr/me HTTP/1.1" 200 OK
+INFO:     192.168.0.1:58295 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:55787 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "GET /api/hr/invite/defaults?id=15 HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:52972 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:61425 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:51922 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:50155 - "GET /api/hr/me HTTP/1.1" 200 OK
+INFO:     192.168.0.1:51922 - "GET /api/hr/candidates HTTP/1.1" 200 OK
+INFO:     192.168.0.1:50155 - "POST /api/hr/token HTTP/1.1" 200 OK
+INFO:     192.168.0.1:57323 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:57323 - "GET /static/logo-img HTTP/1.1" 200 OK
+INFO:     192.168.0.1:57728 - "GET /api/hr/me HTTP/1.1" 200 OK
+INFO:     192.168.0.1:57680 - "GET /api/hr/candidates HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 88, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 69, in candidates
+    cn = db(); cur = cn.cursor()
+         ^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 17, in db
+    def db(): return pyodbc.connect(CS, autocommit=False)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pyodbc.OperationalError: ('HYT00', '[HYT00] [Microsoft][ODBC Driver 18 for SQL Server]Login timeout expired (0) (SQLDriverConnect)')
+INFO:     192.168.0.1:57728 - "GET /api/hr/exam/sets HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 88, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 111, in exam_sets
+    cn = db(); cur = cn.cursor()
+         ^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 17, in db
+    def db(): return pyodbc.connect(CS, autocommit=False)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pyodbc.OperationalError: ('HYT00', '[HYT00] [Microsoft][ODBC Driver 18 for SQL Server]Login timeout expired (0) (SQLDriverConnect)')
+INFO:     192.168.0.1:52108 - "GET /api/hr/candidates HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 88, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/routing.py", line 280, in handle
+    await self.app(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/fastapi/routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2706, in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 1100, in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 69, in candidates
+    cn = db(); cur = cn.cursor()
+         ^^^^
+  File "/Users/ktc_ai/ktc_hr/app.py", line 17, in db
+    def db(): return pyodbc.connect(CS, autocommit=False)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pyodbc.OperationalError: ('HYT00', '[HYT00] [Microsoft][ODBC Driver 18 for SQL Server]Login timeout expired (0) (SQLDriverConnect)')
+INFO:     192.168.0.1:63314 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:63314 - "GET /static/logo-img HTTP/1.1" 200 OK
+INFO:     192.168.0.1:63314 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:63314 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:63314 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:54591 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:54591 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:53744 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:53252 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:49180 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:60857 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:60857 - "POST /api/login HTTP/1.1" 403 Forbidden
+INFO:     192.168.0.1:61712 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.0.1:61712 - "POST /api/login HTTP/1.1" 403 Forbidden

@@ -1,0 +1,298 @@
+import os, json, secrets, pyodbc, ssl
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+import ldap3
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+env = dict(l.strip().split("=",1) for l in open(os.path.join(BASE,".env")) if "=" in l)
+CS = (f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={env['DB_HOST']};DATABASE={env['DB_NAME']};"
+      f"UID={env['DB_USER']};PWD={env['DB_PASS']};TrustServerCertificate=yes")
+ALLOW = {a.strip() for a in env.get("HR_ALLOW","").split(",") if a.strip()}
+
+app = FastAPI(docs_url=None, redoc_url=None)
+app.add_middleware(SessionMiddleware, secret_key=env["SECRET"], max_age=8*3600)
+
+def db(): return pyodbc.connect(CS, autocommit=False)
+
+def ad_login(user, pwd):
+    # 公司標準：走 0.68:8700 ktc_svc 集中驗證（08 指南 §6），回傳使用者資料或 None
+    import urllib.request, json as _json
+    try:
+        req = urllib.request.Request(
+            env["SVC_URL"] + "/auth/ad_login",
+            data=_json.dumps({"username": user, "password": pwd}).encode(),
+            headers={"Content-Type": "application/json", "X-API-Key": env["SVC_KEY"]},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return _json.loads(r.read())
+    except Exception:
+        return None
+
+def me(req: Request):
+    u = req.session.get("user")
+    if not u: raise HTTPException(401)
+    return u
+
+@app.get("/")
+def home(req: Request):
+    if not req.session.get("user"):
+        return FileResponse(os.path.join(BASE,"static","login.html"))
+    return FileResponse(os.path.join(BASE,"static","hr.html"))
+
+@app.get("/static/logo-img")
+def logo(): return FileResponse(os.path.join(BASE,"static","kinetics_logo.png"))
+
+@app.post("/api/login")
+async def login(req: Request):
+    b = await req.json()
+    u, p = b.get("user","").strip(), b.get("pwd","")
+    info = ad_login(u, p) if (u and p and u in ALLOW) else None
+    if not info:
+        return JSONResponse({"ok": False, "msg": "帳號未授權或密碼錯誤"}, status_code=403)
+    req.session["user"] = u
+    req.session["name"] = info.get("name") or u
+    req.session["dept"] = info.get("department") or ""
+    return {"ok": True}
+
+@app.get("/logout")
+def logout(req: Request):
+    req.session.clear(); return RedirectResponse("/")
+
+@app.get("/api/hr/me")
+def whoami(req: Request): return {"user": me(req)}
+
+@app.get("/api/hr/candidates")
+def candidates(req: Request):
+    me(req)
+    cn = db(); cur = cn.cursor()
+    cur.execute("""SELECT c.Id, c.CorporationId, c.Name, c.JobTitle, c.Stage,
+                          i.FormDoneAt, i.ExamScore, c.CreatedAt, c.ResumePath
+                   FROM rec.candidate c LEFT JOIN rec.interview i ON i.CandidateId=c.Id
+                   ORDER BY c.Id DESC""")
+    rows = [{"id": r.Id, "corp": r.CorporationId, "name": r.Name, "job": r.JobTitle,
+             "stage": r.Stage, "form_done": bool(r.FormDoneAt),
+             "created": r.CreatedAt.strftime("%Y/%m/%d %H:%M") if r.CreatedAt else "",
+             "has_resume": bool(r.ResumePath),
+             "score": float(r.ExamScore) if r.ExamScore is not None else None} for r in cur.fetchall()]
+    cn.close(); return {"rows": rows}
+
+@app.post("/api/hr/candidate")
+async def add_candidate(req: Request):
+    u = me(req); b = await req.json()
+    name, job, corp = b.get("name","").strip(), b.get("job","").strip(), b.get("corp","KTC")
+    if not name or not job: raise HTTPException(400)
+    cn = db(); cur = cn.cursor()
+    cur.execute("""SET NOCOUNT ON;
+        INSERT INTO rec.candidate(CorporationId, Name, JobTitle, Source) VALUES(?,?,?,?);
+        SELECT CAST(SCOPE_IDENTITY() AS INT) AS Id;""", corp, name, job, "manual")
+    cid = int(cur.fetchone()[0])
+    cur.execute("INSERT INTO rec.interview(CandidateId) VALUES(?)", cid)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('candidate_created',?,?)", cid, u)
+    cn.commit(); cn.close(); return {"ok": True, "id": cid}
+
+@app.post("/api/hr/token")
+async def gen_token(req: Request):
+    u = me(req); b = await req.json()
+    cid, kind = int(b.get("id",0)), b.get("kind","")
+    if kind not in ("apply","exam") or not cid: raise HTTPException(400)
+    t = secrets.token_urlsafe(18)
+    cn = db(); cur = cn.cursor()
+    cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?,?,?,DATEADD(HOUR,8,SYSDATETIME()))",
+                t, kind, cid)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('token_issued',?,?)", cid, kind+" by "+u)
+    cn.commit(); cn.close()
+    return {"ok": True, "url": f"http://192.168.0.69:9200/form?t={t}"}
+
+@app.get("/api/hr/exam/sets")
+def exam_sets(req: Request):
+    me(req)
+    cn = db(); cur = cn.cursor()
+    cur.execute("""SELECT s.Id, s.JobFunction, s.Title, s.TimeLimitMin, COUNT(q.Id) AS Cnt
+                   FROM rec.exam_set s LEFT JOIN rec.exam_question q ON q.SetId=s.Id
+                   GROUP BY s.Id, s.JobFunction, s.Title, s.TimeLimitMin ORDER BY s.JobFunction""")
+    rows = [{"jf": r.JobFunction, "title": r.Title, "tmin": r.TimeLimitMin, "cnt": r.Cnt} for r in cur.fetchall()]
+    cn.close(); return {"sets": rows}
+
+@app.post("/api/hr/exam/upload")
+async def exam_upload(req: Request, file: UploadFile = File(...)):
+    u = me(req)
+    import openpyxl
+    tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + ".xlsx")
+    with open(tmp, "wb") as f: f.write(await file.read())
+    try:
+        ws = openpyxl.load_workbook(tmp, data_only=True)["題庫"]
+    except Exception:
+        os.remove(tmp); return JSONResponse({"ok": False, "msg": "讀不到「題庫」工作表"}, status_code=400)
+    cn = db(); cur = cn.cursor()
+    groups, skipped = {}, 0
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not row[0]: continue
+        jf, title, tmin, seq, prompt, a, b, c, d, ans, pts = (list(row)+[None]*11)[:11]
+        opts = [str(x).strip() for x in (a,b,c,d) if x not in (None,"")]
+        if not prompt or len(opts) < 2 or str(ans).strip().upper() not in "ABCD":
+            skipped += 1; continue
+        g = groups.setdefault(str(jf).strip(), {"title": str(title or jf).strip(), "tmin": int(tmin or 60), "qs": []})
+        g["qs"].append((int(seq or len(g["qs"])+1), str(prompt).strip(),
+                        json.dumps(opts, ensure_ascii=False), str(ans).strip().upper(), float(pts or 5)))
+    lines = []
+    for jf, g in groups.items():
+        cur.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", jf)
+        r = cur.fetchone()
+        if r:
+            sid = r.Id
+            cur.execute("UPDATE rec.exam_set SET Title=?, TimeLimitMin=? WHERE Id=?", g["title"], g["tmin"], sid)
+            cur.execute("DELETE FROM rec.exam_question WHERE SetId=?", sid)
+        else:
+            cur.execute("""SET NOCOUNT ON;
+                INSERT INTO rec.exam_set(JobFunction, Title, TimeLimitMin) VALUES(?,?,?);
+                SELECT CAST(SCOPE_IDENTITY() AS INT) AS Id;""", jf, g["title"], g["tmin"])
+            sid = int(cur.fetchone()[0])
+        for q in sorted(g["qs"]):
+            cur.execute("INSERT INTO rec.exam_question(SetId,Seq,Prompt,OptionsJson,Answer,Points) VALUES(?,?,?,?,?,?)", sid, *q)
+        lines.append(f"{jf}：{len(g['qs'])} 題（{'覆蓋' if r else '新卷'}）")
+    cn.commit(); cn.close(); os.remove(tmp)
+    return {"ok": True, "msg": "、".join(lines) + (f"｜略過 {skipped} 列" if skipped else "")}
+
+# ══ 面試邀約：Teams 會議＋邀請信＋CC 用人單位 ══
+import msal as _msal, requests as _rq
+_G = "https://graph.microsoft.com/v1.0"
+
+def graph_token():
+    a = _msal.ConfidentialClientApplication(
+        env["GRAPH_CLIENT"],
+        authority="https://login.microsoftonline.com/" + env["GRAPH_TENANT"],
+        client_credential=env["GRAPH_SECRET"])
+    r = a.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    if "access_token" not in r:
+        raise HTTPException(502, "graph token failed")
+    return r["access_token"]
+
+@app.post("/api/hr/invite")
+async def invite(req: Request):
+    u = me(req); b = await req.json()
+    cid = int(b.get("id", 0))
+    cand_mail = (b.get("email") or "").strip()
+    date, time_ = b.get("date",""), b.get("time","")
+    interviewer = (b.get("interviewer") or "").strip()
+    cc = [x.strip() for x in (b.get("cc") or "").split(",") if x.strip()]
+    location = (b.get("location") or "本公司會議室").strip()
+    if not (cid and cand_mail and date and time_):
+        raise HTTPException(400)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT Name, JobTitle FROM rec.candidate WHERE Id=?", cid)
+    c = cur.fetchone()
+    if not c: cn.close(); raise HTTPException(404)
+    start = f"{date}T{time_}:00"
+    import datetime as _dt
+    end_dt = _dt.datetime.fromisoformat(start) + _dt.timedelta(minutes=int(b.get("duration",60)))
+    tk = graph_token(); MB = env["RECRUIT_MAILBOX"]
+    H = {"Authorization": "Bearer " + tk, "Content-Type": "application/json"}
+    attendees = [{"emailAddress": {"address": cand_mail, "name": c.Name}, "type": "required"}]
+    if interviewer:
+        attendees.append({"emailAddress": {"address": interviewer}, "type": "required"})
+    ev = _rq.post(f"{_G}/users/{MB}/calendar/events", headers=H, timeout=30, json={
+        "subject": f"面試邀請｜{c.JobTitle}｜{c.Name}",
+        "start": {"dateTime": start, "timeZone": "Taipei Standard Time"},
+        "end": {"dateTime": end_dt.isoformat(), "timeZone": "Taipei Standard Time"},
+        "location": {"displayName": location},
+        "attendees": attendees,
+        "isOnlineMeeting": True, "onlineMeetingProvider": "teamsForBusiness"})
+    join = ""
+    if ev.status_code < 300:
+        join = (ev.json().get("onlineMeeting") or {}).get("joinUrl", "")
+    # 產調查表 token（面試當日 iPad 用）
+    ft = secrets.token_urlsafe(18)
+    cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?, 'apply', ?, DATEADD(DAY, 14, SYSDATETIME()))", ft, cid)
+    wd = "一二三四五六日"[_dt.datetime.fromisoformat(start).weekday()]
+    import base64 as _b64
+    logo_b64 = _b64.b64encode(open(os.path.join(BASE, "static", "logo_mail.png"), "rb").read()).decode()
+    date_disp = f"{date}(星期{wd})"
+    body_html = f"""<div style="font-family:'Microsoft JhengHei','PingFang TC',sans-serif;font-size:15px;color:#1F2933;line-height:2">
+    <p>{c.Name} 您好，</p>
+    <p style="border-left:4px solid #1AA1A9;padding-left:12px">睿普工程誠摯地邀請您參加面試，地點及時間如下：</p>
+    <p style="margin:6px 0">
+    【面試職務】{c.JobTitle}<br>
+    【面試日期】{date_disp}<br>
+    【面試時間】{time_}<br>
+    【面試地點】{location}
+    {('<br>【線上會議】<a href="' + join + '">Microsoft Teams 會議連結</a>') if join else ''}
+    </p>
+    <p style="color:#C0392B;font-weight:700">✦煩請回覆Mail確認參加面試✦</p>
+    <p>當日請攜帶身分證明文件，抵達後由人事引導以平板填寫應徵資料。<br>
+    以上如有問題歡迎隨時與我聯絡，謝謝～</p>
+    <div style="margin-top:22px;border-top:2px solid #ABCD03;padding-top:14px">
+      <img src="cid:kineticslogo" alt="Kinetics" width="150" style="display:block"><br>
+      <span style="color:#1AA1A9;font-size:12px;letter-spacing:.5px">Analyze the Impossible</span>
+      <table style="font-size:12.5px;color:#5A6B76;margin-top:8px;line-height:1.8"><tr>
+        <td style="padding-right:24px;vertical-align:top">
+          <b style="color:#1D2088">睿普工程股份有限公司</b><br>
+          Kinetics Technology Corporation<br>人事單位 招募窗口</td>
+        <td style="vertical-align:top">
+          M：recruit@kinetics.com.tw<br>
+          T：+886-2-2698-0688　F：+886-2-2698-0686<br>
+          A：新北市汐止區新台五路一段79號18樓之8（台北總公司）</td>
+      </tr></table>
+    </div></div>"""
+    mail = {"message": {
+        "subject": f"Kinetics睿普工程【{c.JobTitle}】面試邀請_{date.replace('-','')}(星期{wd}) {time_} {c.Name}",
+        "body": {"contentType": "HTML", "content": body_html},
+        "toRecipients": [{"emailAddress": {"address": cand_mail}}],
+        "ccRecipients": [{"emailAddress": {"address": x}} for x in cc],
+        "attachments": [{
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": "kinetics_logo.png", "contentType": "image/png",
+            "contentBytes": logo_b64, "isInline": True, "contentId": "kineticslogo"}]},
+        "saveToSentItems": True}
+    sm = _rq.post(f"{_G}/users/{MB}/sendMail", headers=H, json=mail, timeout=30)
+    if sm.status_code >= 300:
+        cn.rollback(); cn.close()
+        return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=N'已邀約', LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, cid)
+    cur.execute("UPDATE rec.interview SET InterviewerMail=?, ScheduledAt=?, TeamsUrl=? WHERE CandidateId=?",
+                interviewer, start, join, cid)
+    cur.execute("""MERGE rec.job_posting AS t
+        USING (SELECT ? AS JobTitle) AS s ON t.JobTitle = s.JobTitle
+        WHEN MATCHED THEN UPDATE SET InterviewerMail=?, CcEmails=?
+        WHEN NOT MATCHED THEN INSERT(CorporationId, JobTitle, InterviewerMail, CcEmails) VALUES('KTC', s.JobTitle, ?, ?);""",
+        c.JobTitle, interviewer, ",".join(cc), interviewer, ",".join(cc))
+    cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', ?, ?)",
+                cid, f"面試邀請 {date} {time_} CC:{','.join(cc) or '無'}", u)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('invite_sent', ?, ?)", cid, f"{date} {time_}")
+    cn.commit(); cn.close()
+    return {"ok": True, "teams": bool(join)}
+
+@app.get("/api/hr/invite/defaults")
+def invite_defaults(id: int, req: Request):
+    me(req)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT Email, JobTitle FROM rec.candidate WHERE Id=?", id)
+    r = cur.fetchone()
+    out = {"email": (r.Email or "") if r else "", "interviewer": "", "cc": ""}
+    if r and r.JobTitle:
+        cur.execute("SELECT TOP 1 InterviewerMail, CcEmails FROM rec.job_posting WHERE JobTitle=? ORDER BY Id DESC", r.JobTitle)
+        jp = cur.fetchone()
+        if jp:
+            out["interviewer"] = jp.InterviewerMail or ""
+            out["cc"] = jp.CcEmails or ""
+    cur.execute("""SELECT DISTINCT value AS m FROM rec.job_posting CROSS APPLY STRING_SPLIT(ISNULL(CcEmails,''), ',')
+                   WHERE LTRIM(value) <> '' UNION SELECT DISTINCT InterviewerMail FROM rec.job_posting WHERE InterviewerMail IS NOT NULL""")
+    out["known"] = sorted({x.m.strip() for x in cur.fetchall() if x.m and x.m.strip()})
+    cn.close()
+    return out
+
+
+@app.get("/api/hr/resume/{cid}")
+def resume(cid: int, req: Request):
+    me(req)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT ResumePath, Name FROM rec.candidate WHERE Id=?", cid)
+    r = cur.fetchone(); cn.close()
+    if not r or not r.ResumePath:
+        raise HTTPException(404)
+    fp = r.ResumePath.split(";")[0]
+    if not os.path.isfile(fp):
+        raise HTTPException(404)
+    return FileResponse(fp, media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename=resume_{cid}.pdf"})

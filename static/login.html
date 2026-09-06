@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Kinetics 人事站</title>
+<style>body{font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:#F4F8F9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+.box{background:#fff;border:1px solid #D9E2E6;border-radius:12px;padding:34px;width:360px;text-align:center;}
+img{height:36px;margin-bottom:6px;} h1{font-size:17px;color:#1D2088;margin:0 0 18px;}
+input{width:100%;font-size:16px;padding:11px;border:1.5px solid #D9E2E6;border-radius:8px;box-sizing:border-box;margin-bottom:10px;}
+button{width:100%;background:#1AA1A9;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;padding:12px;cursor:pointer;}
+#msg{color:#C0392B;font-size:13px;margin-top:10px;min-height:18px;}</style></head><body>
+<div class="box"><img src="/static/logo-img" alt="Kinetics"><h1>人事站（9100）</h1>
+<input id="u" placeholder="AD 帳號" autocomplete="username">
+<input id="p" type="password" placeholder="密碼" autocomplete="current-password">
+<button onclick="go()">登入</button><div id="msg"></div></div>
+<script>
+async function go(){
+  const m=document.getElementById('msg'); m.textContent='驗證中…';
+  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({user:document.getElementById('u').value,pwd:document.getElementById('p').value})});
+  const j=await r.json();
+  if(j.ok) location.reload(); else m.textContent=j.msg||'登入失敗';
+}
+document.getElementById('p').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+</script></body></html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Kinetics 人事站</title>
+<style>
+:root{--teal:#1AA1A9;--deep:#1D2088;--soft:#5A6B76;--line:#DCE6E9;}
+body{font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:#F1F5F6;margin:0;font-size:14.5px;color:#1F2933;}
+.top{background:#20262B;color:#fff;padding:10px 20px;border-bottom:4px solid var(--teal);display:flex;align-items:center;gap:14px;}
+.top img{height:26px;} .top b{font-size:16px;} .top .me{margin-left:auto;font-size:12.5px;opacity:.9;}
+.top a{color:#fff;opacity:.7;font-size:12.5px;margin-left:12px;}
+.tabs{display:flex;gap:2px;background:#fff;border-bottom:1px solid var(--line);padding:0 16px;}
+.tabs button{border:none;background:none;font-size:14.5px;padding:12px 16px;cursor:pointer;color:var(--soft);border-bottom:3px solid transparent;}
+.tabs button.on{color:#0E7A81;border-bottom-color:var(--teal);font-weight:700;}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 20px;}
+.pg{display:none;} .pg.on{display:block;}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:14px;overflow:hidden;}
+.card h2{font-size:15px;padding:11px 15px;border-bottom:1px solid var(--line);margin:0;display:flex;align-items:center;gap:10px;}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{text-align:left;color:var(--soft);font-weight:500;font-size:12px;padding:8px 11px;background:#FAFCFC;border-bottom:1px solid var(--line);}
+td{padding:8px 11px;border-bottom:1px solid #EFF4F5;}
+.b{display:inline-block;border-radius:13px;padding:2px 10px;font-size:11.5px;font-weight:600;}
+.b-run{background:#E8F4F5;color:#0E7A81;} .b-ok{background:#E5F3EA;color:#2E8B57;} .b-off{background:#EEF1F3;color:#8A98A3;}
+button.act{background:none;border:1.5px solid var(--teal);color:var(--teal);border-radius:8px;font-size:12.5px;padding:5px 11px;cursor:pointer;margin-right:4px;}
+button.pri{background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:13px;padding:8px 15px;cursor:pointer;}
+input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-radius:8px;}
+.newrow{display:flex;gap:8px;padding:12px 15px;flex-wrap:wrap;align-items:center;}
+.drop{border:2px dashed var(--teal);border-radius:10px;padding:22px;text-align:center;color:var(--soft);margin:14px;cursor:pointer;}
+#exMsg{padding:0 15px 12px;font-size:13.5px;white-space:pre-wrap;}
+.ok{color:#2E8B57;} .err{color:#C0392B;}
+.urlbox{background:#F4F8F9;border:1px dashed var(--teal);border-radius:8px;padding:8px 10px;font-size:12px;word-break:break-all;margin:6px 15px;display:none;}
+</style></head><body>
+<div class="top"><img src="/static/logo-img"><b>人事站</b><span style="font-size:11px;color:#F2C14E">rec 圈・9100</span>
+<span class="me" id="who"></span><a href="/logout">登出</a></div>
+<div class="tabs">
+<button class="on" onclick="tab(this,'p-rec');loadCand()">招募看板</button>
+<button onclick="tab(this,'p-exam');loadSets()">題庫管理</button>
+</div>
+<div class="wrap">
+<div class="pg on" id="p-rec">
+  <div class="card">
+    <h2>新增應徵者</h2>
+    <div class="newrow">
+      <select id="nCorp"><option>KTC</option><option>KIC</option><option>CTC</option></select>
+      <input id="nName" placeholder="姓名" style="width:140px">
+      <input id="nJob" placeholder="應徵職務（含職能字自動對卷）" style="width:260px">
+      <button class="pri" onclick="addCand()">建立</button>
+    </div>
+  </div>
+  <div class="card" id="invCard" style="display:none">
+    <h2>發送面試邀請 <span id="invWho" style="color:#0E7A81"></span></h2>
+    <div class="newrow">
+      <input id="invMail" placeholder="應徵者 Email" style="width:220px">
+      <input id="invDate" type="date" style="width:150px">
+      <input id="invTime" type="time" style="width:110px">
+      <input id="invInt" placeholder="面試官 Email（會收到會議邀請）" style="width:250px">
+    </div>
+    <div class="newrow">
+      <input id="invCc" placeholder="CC 用人單位（點下方名單或手填）" style="width:380px">
+      <select id="invLoc" style="width:320px">
+        <option>台北總公司（新北市汐止區新台五路一段79號18樓之8）</option>
+        <option>高雄分公司暨工廠（高雄市仁武區京吉一路36號）</option>
+        <option>虎尾辦事處（雲林縣虎尾鎮平和里成德街95號）</option>
+        <option>麥寮辦事處（雲林縣麥寮鄉西濱路二段260-7號）</option>
+        <option>線上面試（Teams）</option>
+      </select>
+      <button class="pri" onclick="sendInv()">寄出邀請＋開 Teams 會議</button>
+      <button class="act" onclick="document.getElementById('invCard').style.display='none'">取消</button>
+    </div>
+    <div id="ccPick" style="padding:0 15px 6px"></div>
+    <div id="invMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
+  </div>
+  <div class="card" id="salCard" style="display:none;border-color:#6B46C1">
+    <h2>發起薪資核定 <span id="salWho" style="color:#6B46C1"></span></h2>
+    <div class="newrow">
+      <input id="sRvUser" placeholder="部門主管 AD 帳號" style="width:170px">
+      <input id="sRvMail" placeholder="部門主管 Email" style="width:230px">
+      <input id="sDept" placeholder="服務單位（如：業務工程部）" style="width:200px">
+      <input id="sDate" type="date" style="width:150px" title="預計報到日（選填）">
+      <button class="pri" style="background:#6B46C1" onclick="sendSal()">發起核薪</button>
+      <button class="act" onclick="document.getElementById('salCard').style.display='none'">取消</button>
+    </div>
+    <div style="padding:0 15px 6px;font-size:12px;color:var(--soft)">薪資由部門主管線上核定 → 薪資複核人確認，人事承辦全程不經手數字；完成後才可產生錄取文件送簽</div>
+    <div id="salMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
+  </div>
+  <div class="card" id="hireCard" style="display:none;border-color:#2E8B57">
+    <h2>產生錄取文件（送總經理核准） <span id="hireWho" style="color:#2E8B57"></span></h2>
+    <div class="newrow">
+      <select id="hHonor" style="width:80px"><option>先生</option><option>小姐</option></select>
+      <input id="hMail" placeholder="Email" style="width:220px">
+      <input id="hDate" type="date" style="width:150px">
+      <input id="hTime" type="time" style="width:110px">
+      <select id="hSite" style="width:150px">
+        <option value="taipei">台北總公司</option><option value="kaohsiung">高雄分公司</option>
+        <option value="huwei">虎尾分公司</option><option value="mailiao">麥寮分公司</option>
+      </select>
+    </div>
+    <div class="newrow">
+      <select id="hNature" style="width:230px"></select>
+      <input id="hJob" placeholder="錄取職位（聘僱書用，可改）" style="width:220px">
+      <input id="hDept" placeholder="服務單位（如：業務工程部）" style="width:200px">
+      <button class="pri" style="background:#2E8B57" onclick="sendHire()">產生文件並送簽</button>
+      <button class="act" onclick="document.getElementById('hireCard').style.display='none'">取消</button>
+    </div>
+    <div style="padding:0 15px 6px;font-size:12px;color:var(--soft)">產出錄取通知＋聘僱書 PDF → 寄總經理核准連結 → 核准後自動套印簽名並由 recruit@ 寄給當事人（附空白表格包）</div>
+    <div id="hireMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
+  </div>
+  <div class="card">
+    <h2>應徵者管線</h2>
+    <div class="urlbox" id="urlBox"></div>
+    <table><thead><tr><th>#</th><th>公司</th><th>姓名</th><th>應徵職務</th><th>收件時間</th><th>狀態</th><th>調查表</th><th>筆試成績</th><th>產生連結</th></tr></thead>
+    <tbody id="candRows"><tr><td colspan="7">載入中…</td></tr></tbody></table>
+  </div>
+</div>
+<div class="pg" id="p-exam">
+  <div class="card">
+    <h2>職能題庫<span style="font-size:12px;color:var(--soft);font-weight:400">應徵職務含職能字自動對卷・上傳整卷覆蓋・新職能自動開卷</span></h2>
+    <table><thead><tr><th>職能（對卷關鍵字）</th><th>卷名</th><th>題數</th><th>作答分鐘</th></tr></thead>
+    <tbody id="setRows"><tr><td colspan="4">載入中…</td></tr></tbody></table>
+    <div class="drop" onclick="document.getElementById('exF').click()"><span id="exName">點此選擇題庫 Excel（.xlsx）上傳匯入</span></div>
+    <input type="file" id="exF" accept=".xlsx" style="display:none" onchange="upExam()">
+    <div id="exMsg"></div>
+  </div>
+</div>
+</div>
+<script>
+function tab(b,id){document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.getElementById(id).classList.add('on');}
+loadCand();
+fetch('/api/hr/me').then(r=>r.json()).then(j=>document.getElementById('who').textContent=j.user+'・AD 已驗證');
+
+let invId = 0;
+async function openInv(id, name){
+  invId = id;
+  document.getElementById('invWho').textContent = '→ ' + name;
+  document.getElementById('invCard').style.display = 'block';
+  const r = await fetch('/api/hr/invite/defaults?id=' + id); const j = await r.json();
+  document.getElementById('invMail').value = j.email || '';
+  document.getElementById('invInt').value = j.interviewer || localStorage.getItem('inv_int') || '';
+  document.getElementById('invCc').value = j.cc || '';
+  const box = document.getElementById('ccPick');
+  box.innerHTML = (j.known || []).map(m =>
+    `<span onclick="addCc('${m}')" style="cursor:pointer;background:#E8F4F5;color:#0E7A81;border-radius:12px;padding:2px 10px;font-size:12px;margin-right:6px;display:inline-block;margin-top:4px">＋ ${m}</span>`).join('');
+  // 日期預設：明天（週六日自動跳週一）
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  document.getElementById('invDate').value = d.toLocaleDateString('sv-SE');
+  if (!document.getElementById('invTime').value) document.getElementById('invTime').value = '10:00';
+  // 面試官與 CC 記住上次輸入
+  scrollTo(0, 0);
+}
+function addCc(m){
+  const f = document.getElementById('invCc');
+  const cur = f.value.split(',').map(x=>x.trim()).filter(Boolean);
+  if(!cur.includes(m)){ cur.push(m); f.value = cur.join(','); }
+}
+async function sendInv(){
+  const m = document.getElementById('invMsg'); m.textContent = '寄送中…'; m.className = '';
+  const r = await fetch('/api/hr/invite', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: invId,
+      email: document.getElementById('invMail').value.trim(),
+      date: document.getElementById('invDate').value,
+      time: document.getElementById('invTime').value,
+      interviewer: document.getElementById('invInt').value.trim(),
+      cc: document.getElementById('invCc').value.trim(),
+      location: document.getElementById('invLoc').value.trim()})});
+  const j = await r.json();
+  localStorage.setItem('inv_int', document.getElementById('invInt').value.trim());
+  localStorage.setItem('inv_cc', document.getElementById('invCc').value.trim());
+  m.textContent = j.ok ? ('✓ 邀請已寄出' + (j.teams ? '，Teams 會議已建立' : '')) : '✗ ' + (j.msg || '失敗，欄位是否齊全？');
+  m.className = j.ok ? 'ok' : 'err';
+  if(j.ok){ loadCand(); }
+}
+function acts(c){
+  const s = c.stage || '';
+  let h = c.has_resume ? `<button class="act" onclick="window.open('/api/hr/resume/${c.id}')">📄 履歷</button>` : '';
+  if(['錄取','不錄取','錄取簽核中'].includes(s)) return h || '—';
+  if(s === '薪資已核定')
+    return h + `<button class="act" style="border-color:#2E8B57;color:#2E8B57" onclick="openHire(${c.id},'${c.name}')">🎉 產件送簽</button>`;
+  if(s === '薪資核定中')
+    return h + `<button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>`;
+  if(s === '擬錄取待回覆')
+    return h + `<button class="act" style="border-color:#6B46C1;color:#6B46C1" onclick="openSal(${c.id},'${c.name}')">💰 線上核薪</button>
+      <button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>
+      <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 未成局</button>`;
+  return h + `<button class="act" onclick="openInv(${c.id},'${c.name}')">✉ 邀約</button>
+    <button class="act" onclick="tok(${c.id},'apply')">調查表</button>
+    <button class="act" onclick="tok(${c.id},'exam')">筆試</button>
+    <button class="act" style="border-color:#1A5FB4;color:#1A5FB4" onclick="sendIntent(${c.id},'${c.name}')">🌟 擬錄取</button>
+    <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 不錄取</button>`;
+}
+async function sendIntent(id, name){
+  if(!confirm('對「' + name + '」寄出錄用意向確認信？（詢問是否接受與可報到日，對方答應後再核薪、產件）')) return;
+  const r = await fetch('/api/hr/intent', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id})});
+  const j = await r.json();
+  alert(j.ok ? '意向信已寄出，狀態進入「待回覆」' : '失敗：' + (j.msg || ''));
+  loadCand();
+}
+async function salOffline(id, name){
+  if(!confirm('確認「' + name + '」薪資已由主管以 email 核定、並已轉寄存查？\n系統僅更新狀態，不記錄薪資數字。')) return;
+  const note = prompt('存查備註（選填，例如：主管 0907 email 核定）', '') || '';
+  const r = await fetch('/api/hr/salary/offline', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, note})});
+  const j = await r.json();
+  alert(j.ok ? '已標記薪資核定完成，可產生錄取文件送簽' : '失敗：' + (j.msg || ''));
+  loadCand();
+}
+let salId = 0;
+function openSal(id, name){
+  salId = id;
+  document.getElementById('salWho').textContent = '→ ' + name;
+  document.getElementById('salCard').style.display = 'block';
+  document.getElementById('sRvUser').value = localStorage.getItem('sal_rv_user') || '';
+  document.getElementById('sRvMail').value = localStorage.getItem('sal_rv_mail') || '';
+  scrollTo(0, 0);
+}
+async function sendSal(){
+  const m = document.getElementById('salMsg'); m.textContent = '發起中…'; m.className = '';
+  const ru = document.getElementById('sRvUser').value.trim(), rm = document.getElementById('sRvMail').value.trim();
+  if(!ru || !rm){ m.textContent = '✗ 主管 AD 帳號與 Email 必填'; m.className = 'err'; return; }
+  const r = await fetch('/api/hr/salary/start', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: salId, reviewer_user: ru, reviewer_mail: rm,
+      dept: document.getElementById('sDept').value.trim(),
+      onboard_date: document.getElementById('sDate').value})});
+  const j = await r.json();
+  localStorage.setItem('sal_rv_user', ru); localStorage.setItem('sal_rv_mail', rm);
+  if(j.ok){
+    m.innerHTML = '✓ 已發起核薪' + (j.mailed ? '，核定連結已寄主管' : '（信未寄出）') +
+      '<br>核定連結（可貼 Teams）：<a href="' + j.review_url + '" target="_blank" style="color:#6B46C1;font-weight:700">' + j.review_url + '</a>';
+    navigator.clipboard && navigator.clipboard.writeText(j.review_url);
+    loadCand();
+  } else { m.textContent = '✗ ' + (j.msg || '失敗'); }
+  m.className = j.ok ? 'ok' : 'err';
+}
+async function rejectCand(id, name){
+  if(!confirm('確定將「' + name + '」標記為不錄取／未成局？')) return;
+  const send_mail = confirm('是否同時寄出婉拒通知信？\n確定＝寄信（一般未錄取）\n取消＝不寄（對方婉拒 offer 等情況）');
+  const r = await fetch('/api/hr/reject', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, send_mail})});
+  const j = await r.json();
+  alert(j.ok ? (j.mailed ? '婉拒通知已寄出' : '已標記不錄取（無 Email 未寄信）') : '失敗：' + (j.msg || ''));
+  loadCand();
+}
+let hireId = 0;
+async function openHire(id, name){
+  hireId = id;
+  document.getElementById('hireWho').textContent = '→ ' + name;
+  document.getElementById('hireCard').style.display = 'block';
+  const r = await fetch('/api/hr/hire/defaults?id=' + id); const j = await r.json();
+  document.getElementById('hMail').value = j.email || '';
+  document.getElementById('hJob').value = j.job || '';
+  const ns = document.getElementById('hNature');
+  ns.innerHTML = (j.natures || []).map(n => `<option>${n}</option>`).join('');
+  ns.selectedIndex = 1;
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  document.getElementById('hDate').value = d.toLocaleDateString('sv-SE');
+  if (!document.getElementById('hTime').value) document.getElementById('hTime').value = '08:30';
+  scrollTo(0, 0);
+}
+async function sendHire(){
+  const m = document.getElementById('hireMsg'); m.textContent = '寄送中…'; m.className = '';
+  const r = await fetch('/api/hr/hire/prepare', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: hireId,
+      honorific: document.getElementById('hHonor').value,
+      email: document.getElementById('hMail').value.trim(),
+      date: document.getElementById('hDate').value,
+      time: document.getElementById('hTime').value,
+      site: document.getElementById('hSite').value,
+      nature: document.getElementById('hNature').value,
+      job: document.getElementById('hJob').value.trim(),
+      dept: document.getElementById('hDept').value.trim()})});
+  const j = await r.json();
+  if(j.ok){
+    m.innerHTML = '✓ 文件已產生' + (j.mailed ? '，核准信已寄總經理' : '，尚未設定總經理信箱') +
+      '<br>核准連結（可貼 Teams 給總經理）：<a href="' + j.approve_url + '" target="_blank" style="color:#0E7A81;font-weight:700">' + j.approve_url + '</a>';
+    navigator.clipboard && navigator.clipboard.writeText(j.approve_url);
+    loadCand();
+  } else { m.textContent = '✗ ' + (j.msg || '失敗，欄位是否齊全？'); }
+  m.className = j.ok ? 'ok' : 'err';
+}
+async function loadCand(){
+  const r=await fetch('/api/hr/candidates'); const j=await r.json();
+  document.getElementById('candRows').innerHTML=j.rows.map(c=>
+    `<tr><td>${c.id}</td><td>${c.corp}</td><td>${c.name}</td><td>${c.job||''}</td><td style="color:var(--soft)">${c.created||''}</td><td>${
+  c.stage==='擬錄取待回覆'?'<span class="b" style="background:#E8F0FE;color:#1A5FB4;font-weight:700">⏳ 待回覆</span>':
+  c.stage==='薪資核定中'?'<span class="b" style="background:#F1E8FE;color:#6B46C1;font-weight:700">💰 核薪中</span>':
+  c.stage==='薪資已核定'?'<span class="b" style="background:#E8F4F5;color:#0E7A81;font-weight:700">💰 已核定</span>':
+  c.stage==='錄取簽核中'?'<span class="b" style="background:#FFF4E0;color:#B7791F;font-weight:700">✍ 簽核中</span>':
+  c.stage==='不錄取'?'<span class="b" style="background:#EEF1F3;color:#8A98A3">不錄取</span>':
+  c.stage==='錄取'?'<span class="b" style="background:#E5F3EA;color:#2E8B57;font-weight:700">🎉 已錄取</span>':
+  c.stage==='已確認出席'?'<span class="b b-ok">✓ 確認出席</span>':
+  c.stage==='需改期'?'<span class="b" style="background:#FDECEA;color:#C0392B">⚠ 需改期</span>':
+  c.stage==='已回覆'?'<span class="b b-run">已回覆</span>':
+  c.stage==='已邀約'?'<span class="b b-run">已邀約</span>':
+  '<span class="b b-off">新履歷</span>'}</td>
+    <td>${c.form_done?'<span class="b b-ok">✓ 已填</span>':'<span class="b b-off">未填</span>'}</td>
+    <td>${c.score!=null?'<span class="b b-run">'+c.score+' 分</span>':'—'}</td>
+    <td>${acts(c)}</td></tr>`).join('')
+    || '<tr><td colspan="7">尚無應徵者</td></tr>';
+}
+async function addCand(){
+  const name=document.getElementById('nName').value.trim(), job=document.getElementById('nJob').value.trim();
+  if(!name||!job){alert('姓名與職務必填');return;}
+  await fetch('/api/hr/candidate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,job,corp:document.getElementById('nCorp').value})});
+  document.getElementById('nName').value='';document.getElementById('nJob').value='';loadCand();
+}
+async function tok(id,kind){
+  const r=await fetch('/api/hr/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id,kind})});
+  const j=await r.json();
+  const b=document.getElementById('urlBox');
+  b.style.display='block';
+  b.innerHTML=(kind==='apply'?'調查表':'筆試')+' 連結（8 小時有效・一次性・已複製）：<a href="'+j.url+'" target="_blank" style="color:#0E7A81;font-weight:700">'+j.url+'</a> <button class="act" onclick="window.open(\''+j.url+'\')">開啟</button>';
+  navigator.clipboard && navigator.clipboard.writeText(j.url);
+}
+async function loadSets(){
+  const r=await fetch('/api/hr/exam/sets'); const j=await r.json();
+  document.getElementById('setRows').innerHTML=j.sets.map(s=>
+    `<tr><td><span class="b b-run">${s.jf}</span></td><td>${s.title}</td><td>${s.cnt}</td><td>${s.tmin}</td></tr>`).join('')
+    || '<tr><td colspan="4">尚無題庫</td></tr>';
+}
+async function upExam(){
+  const f=document.getElementById('exF').files[0]; if(!f)return;
+  document.getElementById('exName').textContent=f.name;
+  const m=document.getElementById('exMsg'); m.textContent='匯入中…'; m.className='';
+  const fd=new FormData(); fd.append('file',f);
+  const r=await fetch('/api/hr/exam/upload',{method:'POST',body:fd});
+  const j=await r.json();
+  m.textContent=j.ok?'✓ '+j.msg:'✗ '+(j.msg||'失敗'); m.className=j.ok?'ok':'err';
+  if(j.ok) loadSets();
+}
+</script></body></html>

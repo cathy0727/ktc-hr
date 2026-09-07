@@ -71,11 +71,27 @@ def candidates(req: Request):
                           i.FormDoneAt, i.ExamScore, c.CreatedAt, c.ResumePath
                    FROM rec.candidate c LEFT JOIN rec.interview i ON i.CandidateId=c.Id
                    ORDER BY c.Id DESC""")
+    data = cur.fetchall()
+    cur.execute("""SELECT RefId, Kind, UsedAt, ExpiresAt FROM (
+        SELECT RefId, Kind, UsedAt, ExpiresAt,
+               ROW_NUMBER() OVER(PARTITION BY RefId, Kind ORDER BY CreatedAt DESC) rn
+        FROM rec.form_token WHERE Kind IN ('apply','exam','onboard')) x WHERE rn=1""")
+    import datetime as _dt
+    _now = _dt.datetime.now()
+    tok = {}
+    for t in cur.fetchall():
+        tok[(t.RefId, t.Kind)] = "used" if t.UsedAt else ("valid" if (t.ExpiresAt and t.ExpiresAt > _now) else "expired")
+    def _tick(cid, kind, done):
+        if done: return "done"
+        return tok.get((cid, kind), "none")
     rows = [{"id": r.Id, "corp": r.CorporationId, "name": r.Name, "job": r.JobTitle,
              "stage": r.Stage, "form_done": bool(r.FormDoneAt),
              "created": r.CreatedAt.strftime("%Y/%m/%d %H:%M") if r.CreatedAt else "",
              "has_resume": bool(r.ResumePath),
-             "score": float(r.ExamScore) if r.ExamScore is not None else None} for r in cur.fetchall()]
+             "score": float(r.ExamScore) if r.ExamScore is not None else None,
+             "tickets": {"apply": _tick(r.Id, "apply", bool(r.FormDoneAt)),
+                          "exam": _tick(r.Id, "exam", r.ExamScore is not None),
+                          "onboard": _tick(r.Id, "onboard", (r.Stage or "") == "已報到")}} for r in data]
     cn.close(); return {"rows": rows}
 
 @app.post("/api/hr/candidate")

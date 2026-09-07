@@ -28,6 +28,7 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
 .urlbox{background:#F4F8F9;border:1px dashed var(--teal);border-radius:8px;padding:8px 10px;font-size:12px;word-break:break-all;margin:6px 15px;display:none;}
 </style></head><body>
 <div class="top"><img src="/static/logo-img"><b>人事站</b><span style="font-size:11px;color:#F2C14E">rec 圈・9100</span>
+<a href="/flow" target="_blank" style="margin-left:14px;font-size:12.5px;color:#7FD6DB;text-decoration:none;border:1px solid #3A4A52;border-radius:14px;padding:2px 12px">🗺 流程說明</a>
 <span class="me" id="who"></span><a href="/logout">登出</a></div>
 <div class="tabs">
 <button class="on" onclick="tab(this,'p-rec');loadCand()">招募看板</button>
@@ -41,6 +42,7 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
       <select id="nCorp"><option>KTC</option><option>KIC</option><option>CTC</option></select>
       <input id="nName" placeholder="姓名" style="width:140px">
       <input id="nJob" placeholder="應徵職務（含職能字自動對卷）" style="width:260px">
+      <input id="nMail" placeholder="Email（選填）" style="width:200px">
       <button class="pri" onclick="addCand()">建立</button>
     </div>
   </div>
@@ -66,6 +68,21 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
     </div>
     <div id="ccPick" style="padding:0 15px 6px"></div>
     <div id="invMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
+  </div>
+  <div class="card" id="reschCard" style="display:none;border-color:#B7791F">
+    <h2>報到日期變更 <span id="reschWho" style="color:#B7791F"></span></h2>
+    <div class="newrow">
+      <input id="rDate" type="date" style="width:150px">
+      <input id="rTime" type="time" style="width:110px">
+      <select id="rSite" style="width:150px">
+        <option value="taipei">台北總公司</option><option value="kaohsiung">高雄分公司</option>
+        <option value="huwei">虎尾分公司</option><option value="mailiao">麥寮分公司</option>
+      </select>
+      <button class="pri" style="background:#B7791F" onclick="sendResch()">寄出變更通知</button>
+      <button class="act" onclick="document.getElementById('reschCard').style.display='none'">取消</button>
+    </div>
+    <div style="padding:0 15px 6px;font-size:12px;color:var(--soft)">寄「報到日期變更通知」給當事人並調整報到連結效期；文件不重簽（總經理核准的是錄取本身）</div>
+    <div id="reschMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
   </div>
   <div class="card" id="salCard" style="display:none;border-color:#6B46C1">
     <h2>發起薪資核定 <span id="salWho" style="color:#6B46C1"></span></h2>
@@ -105,8 +122,8 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
   <div class="card">
     <h2>應徵者管線</h2>
     <div class="urlbox" id="urlBox"></div>
-    <table><thead><tr><th>#</th><th>公司</th><th>姓名</th><th>應徵職務</th><th>收件時間</th><th>狀態</th><th>調查表</th><th>筆試成績</th><th>產生連結</th></tr></thead>
-    <tbody id="candRows"><tr><td colspan="7">載入中…</td></tr></tbody></table>
+    <table><thead><tr><th>#</th><th>公司</th><th>姓名</th><th>應徵職務</th><th>收件時間</th><th>狀態</th><th>填表進度</th><th>產生連結</th></tr></thead>
+    <tbody id="candRows"><tr><td colspan="8">載入中…</td></tr></tbody></table>
   </div>
 </div>
 <div class="pg" id="p-exam">
@@ -126,10 +143,10 @@ document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.g
 loadCand();
 fetch('/api/hr/me').then(r=>r.json()).then(j=>document.getElementById('who').textContent=j.user+'・AD 已驗證');
 
-let invId = 0;
-async function openInv(id, name){
-  invId = id;
-  document.getElementById('invWho').textContent = '→ ' + name;
+let invId = 0, invRound = 1;
+async function openInv(id, name, round){
+  invId = id; invRound = round || 1;
+  document.getElementById('invWho').textContent = (invRound >= 2 ? '（複試）→ ' : '→ ') + name;
   document.getElementById('invCard').style.display = 'block';
   const r = await fetch('/api/hr/invite/defaults?id=' + id); const j = await r.json();
   document.getElementById('invMail').value = j.email || '';
@@ -154,7 +171,7 @@ function addCc(m){
 async function sendInv(){
   const m = document.getElementById('invMsg'); m.textContent = '寄送中…'; m.className = '';
   const r = await fetch('/api/hr/invite', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id: invId,
+    body: JSON.stringify({id: invId, round: invRound,
       email: document.getElementById('invMail').value.trim(),
       date: document.getElementById('invDate').value,
       time: document.getElementById('invTime').value,
@@ -168,31 +185,90 @@ async function sendInv(){
   m.className = j.ok ? 'ok' : 'err';
   if(j.ok){ loadCand(); }
 }
+function tickets(c){
+  const T = c.tickets || {};
+  const st = (k, label, doneTxt) => {
+    const v = T[k] || 'none';
+    if(v === 'done') return `<span class="b" style="background:#E5F3EA;color:#2E8B57;font-weight:700" title="${label}已完成">${doneTxt}</span>`;
+    if(v === 'valid') return `<span class="b" style="background:#E8F0FE;color:#1A5FB4" title="${label}連結有效未填">${label}⏳</span>`;
+    if(v === 'expired') return `<span class="b" style="background:#FDECEA;color:#C0392B" title="${label}連結已過期，請重產">${label}✗</span>`;
+    if(v === 'used') return `<span class="b" style="background:#EEF1F3;color:#8A98A3" title="${label}連結已用（無對應結果）">${label}?</span>`;
+    return `<span class="b b-off" title="${label}尚未產票">${label}—</span>`;
+  };
+  return st('apply','調查','✓調查') + ' ' +
+         st('exam','筆試', c.score != null ? '✍' + c.score + '分' : '✓筆試') + ' ' +
+         st('onboard','報到','🏢報到✓');
+}
 function acts(c){
   const s = c.stage || '';
   let h = c.has_resume ? `<button class="act" onclick="window.open('/api/hr/resume/${c.id}')">📄 履歷</button>` : '';
-  if(['錄取','不錄取','錄取簽核中'].includes(s)) return h || '—';
+  if(s === '錄取')
+    return h + `<button class="act" style="border-color:#B7791F;color:#B7791F" onclick="openResch(${c.id},'${c.name}')">📅 改期</button>`;
+  if(s === '錄取簽核中')
+    return h + `<button class="act" onclick="copyLink(${c.id},'approve')">🔗 核准連結</button>`;
+  if(s === '不錄取' || s === '已報到') return h || '—';
   if(s === '薪資已核定')
     return h + `<button class="act" style="border-color:#2E8B57;color:#2E8B57" onclick="openHire(${c.id},'${c.name}')">🎉 產件送簽</button>`;
   if(s === '薪資核定中')
-    return h + `<button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>`;
+    return h + `<button class="act" onclick="copyLink(${c.id},'salary')">🔗 核定連結</button>
+      <button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>`;
   if(s === '擬錄取待回覆')
     return h + `<button class="act" style="border-color:#6B46C1;color:#6B46C1" onclick="openSal(${c.id},'${c.name}')">💰 線上核薪</button>
       <button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>
       <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 未成局</button>`;
-  return h + `<button class="act" onclick="openInv(${c.id},'${c.name}')">✉ 邀約</button>
+  const re2 = ['已確認出席','已確認複試'].includes(s)
+    ? `<button class="act" style="border-color:#8A5A00;color:#8A5A00" onclick="openInv(${c.id},'${c.name}',2)">🔁 二次面試</button>` : '';
+  return h + re2 + `<button class="act" onclick="openInv(${c.id},'${c.name}')">✉ 邀約</button>
     <button class="act" onclick="tok(${c.id},'apply')">調查表</button>
     <button class="act" onclick="tok(${c.id},'exam')">筆試</button>
     <button class="act" style="border-color:#1A5FB4;color:#1A5FB4" onclick="sendIntent(${c.id},'${c.name}')">🌟 擬錄取</button>
     <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 不錄取</button>`;
 }
-async function sendIntent(id, name){
-  if(!confirm('對「' + name + '」寄出錄用意向確認信？（詢問是否接受與可報到日，對方答應後再核薪、產件）')) return;
+async function sendIntent(id, name, email){
+  if(!email && !confirm('對「' + name + '」寄出錄用意向確認信？（詢問是否接受與可報到日，對方答應後再核薪、產件）')) return;
   const r = await fetch('/api/hr/intent', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id})});
+    body: JSON.stringify(email ? {id, email} : {id})});
   const j = await r.json();
+  if(!j.ok && (j.msg || '').includes('Email')){
+    const em = prompt('此應徵者沒有 Email，請輸入：', '');
+    if(em && em.trim()){ return sendIntent(id, name, em.trim()); }
+  }
   alert(j.ok ? '意向信已寄出，狀態進入「待回覆」' : '失敗：' + (j.msg || ''));
   loadCand();
+}
+let reschId = 0;
+function openResch(id, name){
+  reschId = id;
+  document.getElementById('reschWho').textContent = '→ ' + name;
+  document.getElementById('reschCard').style.display = 'block';
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  document.getElementById('rDate').value = d.toLocaleDateString('sv-SE');
+  if(!document.getElementById('rTime').value) document.getElementById('rTime').value = '08:30';
+  scrollTo(0, 0);
+}
+async function sendResch(){
+  const m = document.getElementById('reschMsg'); m.textContent = '寄送中…'; m.className = '';
+  const r = await fetch('/api/hr/reschedule', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: reschId,
+      date: document.getElementById('rDate').value,
+      time: document.getElementById('rTime').value,
+      site: document.getElementById('rSite').value})});
+  const j = await r.json();
+  m.textContent = j.ok ? '✓ 變更通知已寄出，報到連結效期已同步調整' : '✗ ' + (j.msg || '失敗');
+  m.className = j.ok ? 'ok' : 'err';
+  if(j.ok){ loadCand(); }
+}
+async function copyLink(id, which){
+  const r = await fetch('/api/hr/links?id=' + id); const j = await r.json();
+  const L = j.links || {};
+  const url = which === 'approve' ? L.approve : (L.salreview || L.salconfirm);
+  const label = which === 'approve' ? '核准連結' : (L.salreview ? '主管核定連結' : '複核連結');
+  if(!url){ alert('目前沒有有效連結（可能已用過或過期，請重新發起）'); return; }
+  const b = document.getElementById('urlBox');
+  b.style.display = 'block';
+  b.innerHTML = label + '（已複製，可貼 Teams）：<a href="' + url + '" target="_blank" style="color:#0E7A81;font-weight:700">' + url + '</a>';
+  navigator.clipboard && navigator.clipboard.writeText(url);
 }
 async function salOffline(id, name){
   if(!confirm('確認「' + name + '」薪資已由主管以 email 核定、並已轉寄存查？\n系統僅更新狀態，不記錄薪資數字。')) return;
@@ -281,6 +357,9 @@ async function loadCand(){
   const r=await fetch('/api/hr/candidates'); const j=await r.json();
   document.getElementById('candRows').innerHTML=j.rows.map(c=>
     `<tr><td>${c.id}</td><td>${c.corp}</td><td>${c.name}</td><td>${c.job||''}</td><td style="color:var(--soft)">${c.created||''}</td><td>${
+  c.stage==='已報到'?'<span class="b" style="background:#E5F3EA;color:#1D6F42;font-weight:800">🏢 已報到</span>':
+  c.stage==='複試邀約中'?'<span class="b" style="background:#F5EEE0;color:#8A5A00;font-weight:700">🔁 複試邀約中</span>':
+  c.stage==='已確認複試'?'<span class="b" style="background:#E5F3EA;color:#2E8B57;font-weight:700">✓ 確認複試</span>':
   c.stage==='擬錄取待回覆'?'<span class="b" style="background:#E8F0FE;color:#1A5FB4;font-weight:700">⏳ 待回覆</span>':
   c.stage==='薪資核定中'?'<span class="b" style="background:#F1E8FE;color:#6B46C1;font-weight:700">💰 核薪中</span>':
   c.stage==='薪資已核定'?'<span class="b" style="background:#E8F4F5;color:#0E7A81;font-weight:700">💰 已核定</span>':
@@ -292,17 +371,16 @@ async function loadCand(){
   c.stage==='已回覆'?'<span class="b b-run">已回覆</span>':
   c.stage==='已邀約'?'<span class="b b-run">已邀約</span>':
   '<span class="b b-off">新履歷</span>'}</td>
-    <td>${c.form_done?'<span class="b b-ok">✓ 已填</span>':'<span class="b b-off">未填</span>'}</td>
-    <td>${c.score!=null?'<span class="b b-run">'+c.score+' 分</span>':'—'}</td>
+    <td style="white-space:nowrap">${tickets(c)}</td>
     <td>${acts(c)}</td></tr>`).join('')
-    || '<tr><td colspan="7">尚無應徵者</td></tr>';
+    || '<tr><td colspan="8">尚無應徵者</td></tr>';
 }
 async function addCand(){
   const name=document.getElementById('nName').value.trim(), job=document.getElementById('nJob').value.trim();
   if(!name||!job){alert('姓名與職務必填');return;}
   await fetch('/api/hr/candidate',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name,job,corp:document.getElementById('nCorp').value})});
-  document.getElementById('nName').value='';document.getElementById('nJob').value='';loadCand();
+    body:JSON.stringify({name,job,corp:document.getElementById('nCorp').value,email:document.getElementById('nMail').value.trim()})});
+  document.getElementById('nName').value='';document.getElementById('nJob').value='';document.getElementById('nMail').value='';loadCand();
 }
 async function tok(id,kind){
   const r=await fetch('/api/hr/token',{method:'POST',headers:{'Content-Type':'application/json'},

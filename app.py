@@ -82,11 +82,12 @@ def candidates(req: Request):
 async def add_candidate(req: Request):
     u = me(req); b = await req.json()
     name, job, corp = b.get("name","").strip(), b.get("job","").strip(), b.get("corp","KTC")
+    n_mail = (b.get("email") or "").strip() or None
     if not name or not job: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
     cur.execute("""SET NOCOUNT ON;
-        INSERT INTO rec.candidate(CorporationId, Name, JobTitle, Source) VALUES(?,?,?,?);
-        SELECT CAST(SCOPE_IDENTITY() AS INT) AS Id;""", corp, name, job, "manual")
+        INSERT INTO rec.candidate(CorporationId, Name, JobTitle, Source, Email) VALUES(?,?,?,?,?);
+        SELECT CAST(SCOPE_IDENTITY() AS INT) AS Id;""", corp, name, job, "manual", n_mail)
     cid = int(cur.fetchone()[0])
     cur.execute("INSERT INTO rec.interview(CandidateId) VALUES(?)", cid)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('candidate_created',?,?)", cid, u)
@@ -173,6 +174,7 @@ def graph_token():
 async def invite(req: Request):
     u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
+    rnd = int(b.get("round", 1) or 1)
     cand_mail = (b.get("email") or "").strip()
     date, time_ = b.get("date",""), b.get("time","")
     interviewer = (b.get("interviewer") or "").strip()
@@ -193,7 +195,7 @@ async def invite(req: Request):
     if interviewer:
         attendees.append({"emailAddress": {"address": interviewer}, "type": "required"})
     ev = _rq.post(f"{_G}/users/{MB}/calendar/events", headers=H, timeout=30, json={
-        "subject": f"面試邀請｜{c.JobTitle}｜{c.Name}",
+        "subject": f"{'複試邀請' if rnd >= 2 else '面試邀請'}｜{c.JobTitle}｜{c.Name}",
         "start": {"dateTime": start, "timeZone": "Taipei Standard Time"},
         "end": {"dateTime": end_dt.isoformat(), "timeZone": "Taipei Standard Time"},
         "location": {"displayName": location},
@@ -249,7 +251,10 @@ async def invite(req: Request):
     if sm.status_code >= 300:
         cn.rollback(); cn.close()
         return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
-    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=N'已邀約', LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, cid)
+    _stage = "複試邀約中" if rnd >= 2 else "已邀約"
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=?, LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, _stage, cid)
+    if rnd >= 2:
+        cur.execute("INSERT INTO rec.interview(CandidateId) VALUES(?)", cid)
     cur.execute("UPDATE rec.interview SET InterviewerMail=?, ScheduledAt=?, TeamsUrl=? WHERE CandidateId=?",
                 interviewer, start, join, cid)
     cur.execute("""MERGE rec.job_posting AS t
@@ -259,7 +264,7 @@ async def invite(req: Request):
         c.JobTitle, interviewer, ",".join(cc), interviewer, ",".join(cc))
     cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', ?, ?)",
                 cid, f"面試邀請 {date} {time_} CC:{','.join(cc) or '無'}", u)
-    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('invite_sent', ?, ?)", cid, f"{date} {time_}")
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('invite_sent', ?, ?)", cid, f"round{rnd} {date} {time_}")
     cn.commit(); cn.close()
     return {"ok": True, "teams": bool(join)}
 
@@ -1021,3 +1026,84 @@ async def salary_offline(req: Request):
                 cid, "薪資線下核定完成" + (f"（{note}）" if note else "（email 存查）"), u)
     cn.commit(); cn.close()
     return {"ok": True}
+
+# ══ A.1 補強：報到改期（輕量版）／連結重取／流程說明頁 ══
+def _latest_event(cur, cid, etype):
+    cur.execute("SELECT TOP 1 Payload FROM rec.event WHERE EventType=? AND CandidateId=? ORDER BY Id DESC", etype, cid)
+    r = cur.fetchone()
+    return json.loads(r.Payload) if r and r.Payload and r.Payload.startswith("{") else None
+
+@app.post("/api/hr/reschedule")
+async def reschedule(req: Request):
+    u = me(req); b = await req.json()
+    import datetime as _dt
+    cid = int(b.get("id", 0))
+    nd, nt, ns = (b.get("date") or "").strip(), (b.get("time") or "").strip(), b.get("site", "")
+    if not (cid and nd and nt) or ns not in SITE_INFO: raise HTTPException(400)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT Name, Email, Stage FROM rec.candidate WHERE Id=?", cid)
+    c = cur.fetchone()
+    if not c: cn.close(); raise HTTPException(404)
+    if (c.Stage or "") != "錄取":
+        cn.close(); return JSONResponse({"ok": False, "msg": "僅「錄取」狀態可改期"}, status_code=400)
+    d0 = _latest_event(cur, cid, "hire_doc_created") or {}
+    n0 = _latest_event(cur, cid, "hire_notice_sent") or {}
+    honor = d0.get("honorific", "先生")
+    old_disp = f"{n0.get('date','')} {n0.get('time','')}" if n0 else "（原通知）"
+    rd = _dt.date.fromisoformat(nd)
+    wd = "一二三四五六日"[rd.weekday()]
+    ampm = "上午" if int(nt[:2]) < 12 else "下午"
+    date_disp = f"民國 {rd.year-1911} 年 {rd.month:02d} 月 {rd.day:02d} 日（星期{wd}）{ampm} {nt}"
+    S = SITE_INFO[ns]
+    body = f"""<div style="font-family:'Microsoft JhengHei','PingFang TC',sans-serif;font-size:15px;color:#1F2933;line-height:2">
+    <p>{c.Name} {honor} 您好：</p>
+    <p style="border-left:4px solid #B7791F;padding-left:12px">先前通知之報到時間（{old_disp}）因故調整，造成不便敬請見諒。調整後報到資訊如下：</p>
+    <p style="margin:6px 0">
+    【報到時間】{date_disp}<br>
+    【報到地點】{S['addr']}／{S['name']}<br>
+    【連絡人員】{S['contact']}　{S['tel']}{('　(' + S['ext'] + ')') if S['ext'] else ''}</p>
+    <p>原錄取通知所列繳交證件及文件與其他事項均不變。若時間仍有困難，歡迎直接回覆本信與我們協調。</p>
+    {_mail_footer_html()}</div>"""
+    if not _send_mail((c.Email or "").strip(), f"Kinetics睿普工程【報到日期變更通知】{c.Name}｜新報到日 {rd.strftime('%Y/%m/%d')}(星期{wd}) {nt}",
+                      body, [_logo_attachment()]):
+        cn.close(); return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
+    ot = n0.get("token")
+    if ot:
+        exp = _dt.datetime.combine(rd, _dt.time(23, 59)) + _dt.timedelta(days=3)
+        cur.execute("UPDATE rec.form_token SET ExpiresAt=? WHERE Token=? AND Kind='onboard'", exp, ot)
+    cur.execute("UPDATE rec.candidate SET LastContactAt=SYSDATETIME() WHERE Id=?", cid)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('onboard_rescheduled', ?, ?)", cid,
+                json.dumps({"old": {"date": n0.get("date"), "time": n0.get("time"), "site": n0.get("site")},
+                            "new": {"date": nd, "time": nt, "site": ns}, "by": u}, ensure_ascii=False))
+    cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', ?, ?)",
+                cid, f"報到改期通知 {old_disp} → {nd} {nt} @{S['name']}", u)
+    cn.commit(); cn.close()
+    return {"ok": True}
+
+@app.get("/api/hr/links")
+def hr_links(id: int, req: Request):
+    """重取簽核/核薪連結（免翻信、免撈 SQL）"""
+    me(req)
+    cn = db(); cur = cn.cursor()
+    out = {}
+    cur.execute("""SELECT TOP 1 Token FROM rec.form_token
+                   WHERE Kind='approve' AND RefId=? AND UsedAt IS NULL AND ExpiresAt > SYSDATETIME()
+                   ORDER BY CreatedAt DESC""", id)
+    r = cur.fetchone()
+    if r: out["approve"] = f"http://192.168.0.69:9100/approve?t={r.Token}"
+    ev = _latest_event(cur, id, "salary_review_started")
+    if ev and ev.get("sal_id"):
+        for kind, path in (("salreview", "salary/review"), ("salconfirm", "salary/confirm")):
+            cur.execute("""SELECT TOP 1 Token FROM rec.form_token
+                           WHERE Kind=? AND RefId=? AND UsedAt IS NULL AND ExpiresAt > SYSDATETIME()
+                           ORDER BY CreatedAt DESC""", kind, ev["sal_id"])
+            r = cur.fetchone()
+            if r: out[kind] = f"http://192.168.0.69:9100/{path}?t={r.Token}"
+    cn.close()
+    return {"ok": True, "links": out}
+
+@app.get("/flow")
+def flow_page():
+    fp = os.path.join(BASE, "static", "hr_flow.html")
+    if not os.path.isfile(fp): raise HTTPException(404)
+    return FileResponse(fp, media_type="text/html")

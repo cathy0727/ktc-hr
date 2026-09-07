@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kinetics 招募到入職・全流程地圖</title>
+<style>
+:root{
+  --blue:#1AA1A9; --deep:#1D2088; --green:#ABCD03;
+  --ink:#1F2933; --soft:#5A6B76; --line:#DCE6E9; --bg:#F4F8F9; --card:#fff;
+  --st-wait:#1A5FB4; --st-sal:#6B46C1; --st-sign:#B7791F; --st-ok:#2E8B57; --st-no:#8A98A3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.7}
+.top{background:#20262B;color:#fff;padding:26px 0;border-bottom:5px solid var(--blue)}
+.wrap{max-width:1060px;margin:0 auto;padding:0 26px}
+.top h1{font-size:26px;font-weight:800;letter-spacing:1px}
+.top p{color:#B9C6CC;font-size:14px;margin-top:6px}
+.top .sys{color:var(--green);font-weight:700}
+.legend{display:flex;gap:22px;flex-wrap:wrap;padding:16px 0;font-size:13px;color:var(--soft);border-bottom:1px solid var(--line);margin-bottom:8px}
+.legend i{display:inline-block;width:26px;height:0;border-top:3px solid var(--blue);vertical-align:middle;margin-right:6px}
+.legend i.dash{border-top-style:dashed;border-top-color:#9FB2BA}
+.legend .b{vertical-align:middle}
+
+/* 主幹：車站式時間軸 */
+.rail{position:relative;padding:26px 0 10px}
+.rail::before{content:"";position:absolute;left:29px;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--blue) 0%,var(--blue) 58%,#9FB2BA 58%,#9FB2BA 100%);border-radius:2px}
+.station{position:relative;padding:0 0 34px 84px}
+.station .node{position:absolute;left:8px;top:2px;width:46px;height:46px;border-radius:50%;background:var(--card);border:4px solid var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:var(--blue)}
+.station.todo .node{border-color:#9FB2BA;border-style:dashed;color:#9FB2BA}
+.station h2{font-size:19px;font-weight:800;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.station h2 .where{font-size:12.5px;font-weight:600;color:var(--soft);background:#EAF1F3;border-radius:20px;padding:3px 12px}
+.station h2 .phase{font-size:12.5px;font-weight:700;color:#fff;background:#9FB2BA;border-radius:20px;padding:3px 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:12px;overflow:hidden}
+.station.todo .card{border-style:dashed;background:#FBFDFD}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.cell{padding:16px 20px;font-size:14.5px}
+.cell + .cell{border-left:1px solid var(--line)}
+.cell h3{font-size:13px;color:var(--soft);font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--green)}
+.cell.auto h3{border-bottom-color:var(--blue)}
+.cell li{margin:5px 0 5px 2px;list-style:none;padding-left:18px;position:relative}
+.cell li::before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:2px;background:var(--green)}
+.cell.auto li::before{background:var(--blue);border-radius:50%}
+.who{display:inline-block;font-size:12.5px;font-weight:700;color:var(--deep);background:#E9EAF6;border-radius:5px;padding:1px 8px;margin-right:4px}
+.btn{display:inline-block;font-size:13px;font-weight:700;border:1.5px solid var(--blue);color:var(--blue);border-radius:8px;padding:2px 10px;background:#fff;white-space:nowrap}
+.btn.g{border-color:var(--st-ok);color:var(--st-ok)} .btn.p{border-color:var(--st-sal);color:var(--st-sal)}
+.btn.t{border-color:#0E7A81;color:#0E7A81} .btn.r{border-color:#C0392B;color:#C0392B} .btn.bl{border-color:var(--st-wait);color:var(--st-wait)}
+.badge{display:inline-block;font-size:12.5px;font-weight:800;border-radius:20px;padding:2px 12px;white-space:nowrap}
+.bd-new{background:#EAF1F3;color:var(--soft)} .bd-wait{background:#E8F0FE;color:var(--st-wait)}
+.bd-sal{background:#F1E8FE;color:var(--st-sal)} .bd-salok{background:#E8F4F5;color:#0E7A81}
+.bd-sign{background:#FFF4E0;color:var(--st-sign)} .bd-ok{background:#E5F3EA;color:var(--st-ok)}
+.bd-no{background:#EEF1F3;color:var(--st-no)}
+.flowbar{padding:10px 20px;background:#F7FAFB;border-top:1px solid var(--line);font-size:13.5px;color:var(--soft)}
+.flowbar .badge{margin:0 3px}
+.gate{margin:0 0 34px 84px;background:#FFF9EC;border:1.5px solid #EAD9A8;border-radius:10px;padding:10px 18px;font-size:13.5px;color:#8A6D1B}
+.gate b{color:#6B5310}
+
+/* 側線與未來區 */
+.side{margin:10px 0 26px;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--green);border-radius:12px;padding:20px 24px}
+.side h2{font-size:17px;font-weight:800;margin-bottom:10px}
+.pathline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;margin:8px 0}
+.pathline .stop{background:#F0F6F2;border:1px solid #D7E6DA;border-radius:8px;padding:6px 14px;font-weight:600}
+.pathline .arrow{color:#9FB2BA;font-weight:800}
+.pathline .note{font-size:12.5px;color:var(--soft)}
+.future{margin:0 0 40px;background:#FBFDFD;border:1.5px dashed #9FB2BA;border-radius:12px;padding:20px 24px}
+.future h2{font-size:17px;font-weight:800;color:var(--soft);margin-bottom:10px}
+.future .pathline .stop{background:#fff;border-style:dashed}
+.foot{padding:18px 0 40px;font-size:12.5px;color:var(--soft);border-top:1px solid var(--line)}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.cell + .cell{border-left:none;border-top:1px solid var(--line)}}
+@media print{body{background:#fff}.top{border-bottom-color:#000}}
+</style>
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <h1>招募到入職・全流程地圖</h1>
+  <p>人事站 <span class="sys">9100</span>｜填表服務 <span class="sys">9200</span>｜薪資圈 pay schema（人事承辦全程不經手薪資數字）　—　2026-09 版</p>
+</div></div>
+
+<div class="wrap">
+  <div class="legend">
+    <span><i></i><span class="b">實線＝已上線</span></span>
+    <span><i class="dash"></i><span class="b">虛線＝規劃中（Phase B / C）</span></span>
+    <span><span class="who">角色</span>＝誰動手</span>
+    <span><span class="btn" style="font-size:12px">按鈕</span>＝看板上的實際按鈕</span>
+    <span><span class="badge bd-ok" style="font-size:12px">徽章</span>＝看板狀態</span>
+  </div>
+
+  <div class="rail">
+
+    <!-- ① 應徵段 -->
+    <div class="station">
+      <div class="node">①</div>
+      <h2>應徵段 <span class="where">9100 看板＋9200 填表</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">人事</span>看板審閱 104 履歷與 AI 摘要，按 <span class="btn">✉ 邀約</span>（整條線唯一人為決定點）</li>
+            <li><span class="who">應徵者</span>報到現場 iPad 填 <span class="btn">調查表</span>、作答 <span class="btn">筆試</span>（token 開頁）</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>104 履歷信自動進 rec.candidate、AI 產摘要</li>
+            <li>邀約信寄出＋回覆連結、筆試自動閱卷回寫成績</li>
+          </div>
+        </div>
+        <div class="flowbar">狀態走向：<span class="badge bd-new">新履歷</span>→<span class="badge bd-ok" style="background:#E5F3EA">✓ 確認出席</span>→ 面試</div>
+      </div>
+    </div>
+
+    <!-- ② 擬錄取 -->
+    <div class="station">
+      <div class="node">②</div>
+      <h2>擬錄取・意向確認 <span class="where">9100</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">人事</span>面試通過後按 <span class="btn bl">🌟 擬錄取</span>；未錄取按 <span class="btn r">✗ 不錄取</span>（可選寄或不寄婉拒信）</li>
+            <li><span class="who">應徵者</span>回信確認是否接受、可報到日期（3 日內）</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>寄「錄用意向確認信」（不含正式文件、不動用簽核）</li>
+            <li>不錄取者寄婉拒信＋設個資保留到期日（1 年後可清）</li>
+          </div>
+        </div>
+        <div class="flowbar">狀態走向：→<span class="badge bd-wait">⏳ 待回覆</span>　或　<span class="badge bd-no">不錄取</span>（終點）</div>
+      </div>
+    </div>
+
+    <!-- ③ 薪資核定 -->
+    <div class="station">
+      <div class="node">③</div>
+      <h2>薪資核定・雙關卡 <span class="where">9100／pay 圈</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">人事</span>對方答應後按 <span class="btn p">💰 線上核薪</span>（只填主管是誰，碰不到數字）</li>
+            <li><span class="who">部門主管</span>開密令連結、AD 驗身分，填本薪／職務加給／伙食津貼</li>
+            <li><span class="who">薪資複核人</span>開複核頁、AD 驗身分看數字，按確認核定；可下載核定單 PDF 列印、報到日面交本人簽收</li>
+            <li>主管習慣走信件？<span class="btn t">📧 線下已核定</span>＝email 核定轉寄存查後只推狀態、數字零入庫</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>寄核定連結給主管→寄複核連結給複核人（14 天效期、用過作廢）</li>
+            <li>數字只寫 pay.hire_salary（僅 ktc_hr_pay 帳號可讀，其餘帳號 DB 層 DENY）</li>
+            <li>核定單 PDF 套印（機密文件章＋AD 留痕＋簽收欄）</li>
+          </div>
+        </div>
+        <div class="flowbar">狀態走向：→<span class="badge bd-sal">💰 核薪中</span>→<span class="badge bd-salok">💰 已核定</span></div>
+      </div>
+    </div>
+
+    <div class="gate">⛔ <b>閘門</b>：狀態未達「薪資已核定」，下一站的「產件送簽」按鈕按了會被系統擋下——先核薪、後簽核、才寄通知，順序鎖死。</div>
+
+    <!-- ④ 產件簽核 -->
+    <div class="station">
+      <div class="node">④</div>
+      <h2>產件・總經理簽核・寄發 <span class="where">9100</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">人事</span>按 <span class="btn g">🎉 產件送簽</span>，填報到日／時間／地點／聘僱性質／職位／服務單位</li>
+            <li><span class="who">總經理</span>開核准連結（信件或 Teams 皆可）：PDF 預覽五頁 → 輸入自己的 AD 帳密 → 按「核准並簽署」</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>套印錄取通知＋聘僱書（正/副本）PDF，寄總經理核准連結</li>
+            <li>核准即蓋總經理簽名圖 → recruit@ 寄新人：簽名版 PDF＋10 項文件清單＋空白表格包</li>
+            <li>同時產「報到 token」備用（報到頁上線後信內附連結）；產件/核准/寄出三時點全留痕</li>
+          </div>
+        </div>
+        <div class="flowbar">狀態走向：→<span class="badge bd-sign">✍ 簽核中</span>→<span class="badge bd-ok">🎉 錄取</span></div>
+      </div>
+    </div>
+
+    <!-- ⑤ 報到段 -->
+    <div class="station todo">
+      <div class="node">⑤</div>
+      <h2>報到段 <span class="where">9200</span> <span class="phase">Phase B・規劃中</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">新人</span>報到日憑 token 開頁：勾收 10 項文件、此時才補填身分證號、婚姻／家庭等加保資料</li>
+            <li><span class="who">人事</span>現場逐項核對收件</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>加保備料經 INSERT-only 端點落 pay.onboard_staging（人事承辦看不回）</li>
+            <li>文件掃描檔落報到暫存夾，取得工號後自動搬進正式歸檔夾</li>
+            <li><span class="who">保密角色</span>從 staging 接手勞健保加保</li>
+          </div>
+        </div>
+        <div class="flowbar">狀態走向：→ 已報到（規劃）</div>
+      </div>
+    </div>
+
+    <!-- ⑥ 入職段 -->
+    <div class="station todo">
+      <div class="node">⑥</div>
+      <h2>入職段 <span class="where">鼎新 HR → 0.61 鏡像</span> <span class="phase">Phase C・規劃中</span></h2>
+      <div class="card">
+        <div class="grid">
+          <div class="cell">
+            <h3>人做的事</h3>
+            <li><span class="who">人事</span>理想＝鼎新「批量導入」一鍵入主檔（可行性洽鼎新中）；不行則以核定資料印對照單手 key</li>
+          </div>
+          <div class="cell auto">
+            <h3>系統自動做</h3>
+            <li>隔日 06:00 鏡像後 v_EmployeeList 出現此人</li>
+            <li>AD 帳號／信箱／歸檔區「工號_姓名」資料夾跟著建立</li>
+            <li>之後查詢走 portal（員工資料、個資調閱、證照效期），9100 維持「招募工作站」定位</li>
+          </div>
+        </div>
+        <div class="flowbar">員工主檔正宮＝鼎新 HR；9100 不重複養人事資料</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 側線：附件歸檔 -->
+  <div class="side">
+    <h2>附件歸檔側線 — 資料落表、檔案歸戶</h2>
+    <div class="pathline">
+      <span class="stop">系統上傳頁</span><span class="arrow">→</span>
+      <span class="stop">即時入庫（上傳那一秒搬好）</span><span class="arrow">→</span>
+      <span class="stop">.101 人事歸檔／工號_姓名／四子夾</span>
+    </div>
+    <div class="pathline">
+      <span class="stop">人工直接丟共用碟</span><span class="arrow">→</span>
+      <span class="stop">每日凌晨掃描兜底＋AI 辨識（待覆核）</span><span class="arrow">→</span>
+      <span class="stop">同一個工號資料夾</span>
+    </div>
+    <div class="pathline"><span class="note">原則：表單只是入口——填完即落表（hr_cert／hr_training），之後查紀錄查表、看檔案開夾，不翻表單。鼎新只管欄位、永遠不收附件。</span></div>
+  </div>
+
+  <!-- 未來區：教育訓練 -->
+  <div class="future">
+    <h2>未來擴充 — 教育訓練閉環（另線開打）</h2>
+    <div class="pathline">
+      <span class="stop">訓練申請單（HTML 表單＋簽核）</span><span class="arrow">→</span>
+      <span class="stop">核准即寫 hr_training 紀錄</span><span class="arrow">→</span>
+      <span class="stop">結訓上傳證書</span><span class="arrow">→</span>
+      <span class="stop">檔案落工號夾／證照子夾＋效期寫 hr_cert</span><span class="arrow">→</span>
+      <span class="stop">回訓到期自動提醒</span>
+    </div>
+    <div class="pathline"><span class="note">日常零手 key；歷史存量另做一次性 Excel 匯入。新人第一個月薪資、投保級距、加保完整性之後由 9000 薪資稽核 AI 讀 pay.hire_salary／onboard_staging 自動檢核。</span></div>
+  </div>
+
+  <div class="foot">
+    Kinetics Technology Corporation・數位中心｜狀態徽章與按鈕名稱與 9100 看板一致；Phase B／C 上線後本頁虛線改實線。
+  </div>
+</div>
+</body>
+</html>

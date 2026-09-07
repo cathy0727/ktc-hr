@@ -1123,3 +1123,21 @@ def flow_page():
     fp = os.path.join(BASE, "static", "hr_flow.html")
     if not os.path.isfile(fp): raise HTTPException(404)
     return FileResponse(fp, media_type="text/html")
+
+@app.post("/api/hr/confirm2")
+async def confirm2(req: Request):
+    """人事收到複試回覆後手動確認出席"""
+    u = me(req); b = await req.json()
+    cid = int(b.get("id", 0))
+    if not cid: raise HTTPException(400)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT Stage FROM rec.candidate WHERE Id=?", cid)
+    c = cur.fetchone()
+    if not c: cn.close(); raise HTTPException(404)
+    if (c.Stage or "") != "複試邀約中":
+        cn.close(); return JSONResponse({"ok": False, "msg": "僅「複試邀約中」可確認"}, status_code=400)
+    cur.execute("UPDATE rec.candidate SET Stage=N'已確認複試', LastContactAt=SYSDATETIME() WHERE Id=?", cid)
+    cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'in', N'複試出席確認', ?)", cid, u)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('reinterview_confirmed', ?, ?)", cid, u)
+    cn.commit(); cn.close()
+    return {"ok": True}

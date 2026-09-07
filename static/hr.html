@@ -18,7 +18,7 @@ th{text-align:left;color:var(--soft);font-weight:500;font-size:12px;padding:8px 
 td{padding:8px 11px;border-bottom:1px solid #EFF4F5;}
 .b{display:inline-block;border-radius:13px;padding:2px 10px;font-size:11.5px;font-weight:600;}
 .b-run{background:#E8F4F5;color:#0E7A81;} .b-ok{background:#E5F3EA;color:#2E8B57;} .b-off{background:#EEF1F3;color:#8A98A3;}
-button.act{background:none;border:1.5px solid var(--teal);color:var(--teal);border-radius:8px;font-size:12.5px;padding:5px 11px;cursor:pointer;margin-right:4px;}
+button.act{background:none;border:1.5px solid var(--teal);color:var(--teal);border-radius:8px;font-size:12.5px;padding:5px 11px;cursor:pointer;margin-right:4px;;padding:4px 9px;font-size:12.5px;margin:1px 0}
 button.pri{background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:13px;padding:8px 15px;cursor:pointer;}
 input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-radius:8px;}
 .newrow{display:flex;gap:8px;padding:12px 15px;flex-wrap:wrap;align-items:center;}
@@ -216,6 +216,9 @@ function acts(c){
     return h + `<button class="act" style="border-color:#6B46C1;color:#6B46C1" onclick="openSal(${c.id},'${c.name}')">💰 線上核薪</button>
       <button class="act" style="border-color:#0E7A81;color:#0E7A81" onclick="salOffline(${c.id},'${c.name}')">📧 線下已核定</button>
       <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 未成局</button>`;
+  if(s === '複試邀約中')
+    return h + `<button class="act" style="border-color:#2E8B57;color:#2E8B57" onclick="confirm2(${c.id},'${c.name}')">✓ 確認複試</button>
+      <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 不錄取</button>`;
   const re2 = ['已確認出席','已確認複試'].includes(s)
     ? `<button class="act" style="border-color:#8A5A00;color:#8A5A00" onclick="openInv(${c.id},'${c.name}',2)">🔁 二次面試</button>` : '';
   return h + re2 + `<button class="act" onclick="openInv(${c.id},'${c.name}')">✉ 邀約</button>
@@ -234,6 +237,14 @@ async function sendIntent(id, name, email){
     if(em && em.trim()){ return sendIntent(id, name, em.trim()); }
   }
   alert(j.ok ? '意向信已寄出，狀態進入「待回覆」' : '失敗：' + (j.msg || ''));
+  loadCand();
+}
+async function confirm2(id, name){
+  if(!confirm('「' + name + '」已回覆確認出席複試？')) return;
+  const r = await fetch('/api/hr/confirm2', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id})});
+  const j = await r.json();
+  if(!j.ok) alert('失敗：' + (j.msg || ''));
   loadCand();
 }
 let reschId = 0;
@@ -372,7 +383,7 @@ async function loadCand(){
   c.stage==='已邀約'?'<span class="b b-run">已邀約</span>':
   '<span class="b b-off">新履歷</span>'}</td>
     <td style="white-space:nowrap">${tickets(c)}</td>
-    <td>${acts(c)}</td></tr>`).join('')
+    <td style="white-space:nowrap">${acts(c)}</td></tr>`).join('')
     || '<tr><td colspan="8">尚無應徵者</td></tr>';
 }
 async function addCand(){

@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>薪資資料交付 | Kinetics 人事站</title>
 <style>
-:root{--ink:#22313A;--teal:#0E7A81;--teal-d:#0A5B61;--line:#DCE4E6;--grey:#8A98A3;--amber:#8A5A00;--green:#2E8B57;--red:#C0392B;}
+:root{--ink:#22313A;--teal:#1AA6A9;--teal-d:#12797B;--navy:#1D2088;--sky:#54C3F1;--yellow:#FDD23E;--line:#DCE4E6;--grey:#8A98A3;--amber:#8A5A00;--green:#6B7A00;--red:#C0392B;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif;background:#F2F5F5;color:var(--ink);font-size:15px;line-height:1.7;}
-header{background:#1B2A31;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-header b{font-size:17px;}header b span{color:#4FC3C9;}
-header .note{font-size:12.5px;color:#B9C6CB;}
+header{background:var(--navy);color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+header b{font-size:17px;}header b span{color:var(--sky);}
+header .note{font-size:12.5px;color:#C9D6F2;background:none;border:none;padding:0;}
 main{max-width:980px;margin:0 auto;padding:24px 20px 60px;}
 h1{font-size:21px;margin-bottom:4px;}
 .lede{color:#5A6B76;margin-bottom:16px;max-width:70ch;font-size:14px;}
@@ -24,7 +24,7 @@ th{text-align:left;color:var(--grey);font-weight:normal;font-size:13px;border-bo
 td{border-bottom:1px solid #EDF1F2;padding:6px 8px;}
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:12px;white-space:nowrap;}
-.chip.ok{background:#E7F4EC;color:var(--green);}
+.chip.ok{background:#F3F7D9;color:var(--green);}
 .chip.off{background:#EEF1F3;color:var(--grey);}
 .btn{border:1px solid var(--teal);color:var(--teal);background:#fff;border-radius:8px;padding:7px 16px;font-size:14px;font-family:inherit;cursor:pointer;}
 .btn:hover{background:#EAF5F5;}
@@ -86,17 +86,38 @@ async function loadStatus(){
   t.innerHTML = '<tr><th>項目</th><th>範本</th><th>上傳</th><th>版本</th><th>最後交付</th><th>狀態</th></tr>';
   for(const [k, name] of KINDS){
     const s = data[name];
-    t.innerHTML += `<tr>
+    t.innerHTML += row(k, name, s, true);
+  }
+  const fixedNames = KINDS.map(x=>x[1]);
+  for(const [name, s] of Object.entries(data)){
+    if(fixedNames.includes(name) || !s) continue;
+    t.innerHTML += row(s.custom || name, name, s, false);   // 自訂項目列（無範本）
+  }
+  t.innerHTML += `<tr>
+    <td colspan="2" style="color:var(--grey)">＋其他檔案（項目名＝檔名）</td>
+    <td><input type="file" onchange="uploadCustom(this)"></td>
+    <td class="num">—</td><td>—</td><td><span class="chip off">新增</span></td>
+  </tr>`;
+}
+
+function row(k, name, s, hasTpl){
+  return `<tr>
       <td>${name}</td>
-      <td><a class="tpl" href="/api/hr/paydrop/template?kind=${k}">範本↓</a></td>
+      <td>${hasTpl ? `<a class="tpl" href="/api/hr/paydrop/template?kind=${k}">範本↓</a>` : '—'}</td>
       <td><input type="file" onchange="upload('${k}','${name}',this)"></td>
       <td class="num">${s ? s.rows : '—'}</td>
       <td>${s ? (s.at||'') + '　' + (s.by||'')
-        + (s.file ? `<br><a class="tpl" href="/api/hr/paydrop/file?kind=${k}&period=${encodeURIComponent(P())}&corp=${C()}&saved=${encodeURIComponent(s.saved||'')}">📄 ${s.file}</a>` : '')
+        + (s.file ? `<br><a class="tpl" href="/api/hr/paydrop/file?kind=${encodeURIComponent(k)}&period=${encodeURIComponent(P())}&corp=${C()}&saved=${encodeURIComponent(s.saved||'')}">📄 ${s.file}</a>` : '')
         + (s.path ? `<br><span class="fname">${s.path}</span>` : '') : '—'}</td>
       <td>${s ? '<span class="chip ok">✓ 已交付</span>' : '<span class="chip off">未交</span>'}</td>
     </tr>`;
-  }
+}
+
+function uploadCustom(inp){
+  const f = inp.files[0];
+  if(!f) return;
+  const name = f.name.replace(/\.[^.]+$/, '').trim().slice(0, 40) || '未命名';
+  upload(name, name, inp);
 }
 
 async function upload(kind, name, inp){
@@ -107,7 +128,7 @@ async function upload(kind, name, inp){
   const fd = new FormData(); fd.append('file', f);
   let j = {};
   try{
-    const r = await fetch(`/api/hr/paydrop/upload?kind=${kind}&period=${encodeURIComponent(P())}&corp=${C()}`, {method:'POST', body:fd});
+    const r = await fetch(`/api/hr/paydrop/upload?kind=${encodeURIComponent(kind)}&period=${encodeURIComponent(P())}&corp=${C()}`, {method:'POST', body:fd});
     j = await r.json();
   }catch(e){}
   inp.value = '';

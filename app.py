@@ -1167,7 +1167,7 @@ async def confirm2(req: Request):
     return {"ok": True}
 
 # ══ 薪資資料交付（人事窗口：上傳浮動明細 → pay.pay_item_staging；窄通道只進不出）══
-PAYDROP_KINDS = {"phone": "電話費明細", "allowance": "津貼明細", "attend": "出勤狀況", "other": "其他加扣項"}
+PAYDROP_KINDS = {"phone": "電話費明細", "allowance": "津貼明細", "attend": "出勤狀況", "bonus": "獎金明細", "insadj": "勞健保調整", "other": "其他加扣項"}
 _paydrop_tmp = {}   # 預覽暫存 token -> 批次內容（commit 後即丟）
 
 def _emp_lookup():
@@ -1217,7 +1217,11 @@ def paydrop_template(kind: str, req: Request):
 @app.post("/api/hr/paydrop/upload")
 async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC", file: UploadFile = File(...)):
     u = me(req)
-    if kind not in PAYDROP_KINDS: raise HTTPException(400, "kind 不合法")
+    kindname = PAYDROP_KINDS.get(kind)
+    if kindname is None:
+        kind = os.path.basename((kind or "").strip())
+        if not kind or len(kind) > 40 or kind.startswith("."): raise HTTPException(400, "項目名稱不合法")
+        kindname = kind
     import re as _re, datetime as _dt, io as _io
     if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400, "期別格式應為 YYYY-MM")
     fname = os.path.basename(file.filename or "upload.bin")
@@ -1237,7 +1241,7 @@ async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC"
         pass
     cn = db(); cur = cn.cursor()
     cur.execute("INSERT INTO rec.event(EventType, Payload) VALUES('paydrop_deliver', ?)",
-                json.dumps({"kind": PAYDROP_KINDS[kind], "period": period, "corp": corp,
+                json.dumps({"kind": kindname, "period": period, "corp": corp,
                             "file": fname[:190], "saved": os.path.basename(dest),
                             "rows": valid, "by": u}, ensure_ascii=False))
     cn.commit(); cn.close()
@@ -1268,13 +1272,33 @@ def paydrop_status(period: str, req: Request, corp: str = "KTC"):
         out[name] = {"rows": len(fs), "at": t.strftime("%Y-%m-%d %H:%M"),
                      "by": parts[2] if len(parts) >= 4 else "",
                      "file": parts[3] if len(parts) >= 4 else latest, "saved": latest, "path": f"paydrop/{period}/{corp}/{k}/"}
-    return {"ok": True, "kinds": {v: out.get(v) for v in PAYDROP_KINDS.values()}}
+    pbase = os.path.join(BASE, "paydrop", period, corp)
+    try:
+        for k in sorted(os.listdir(pbase)):
+            d = os.path.join(pbase, k)
+            if k in PAYDROP_KINDS or k.startswith(".") or not os.path.isdir(d): continue
+            fs = sorted(f for f in os.listdir(d) if not f.startswith("."))
+            if not fs: continue
+            latest = fs[-1]
+            t = _dt.datetime.fromtimestamp(os.path.getmtime(os.path.join(d, latest)))
+            parts = latest.split("_", 3)
+            out[k] = {"rows": len(fs), "at": t.strftime("%Y-%m-%d %H:%M"),
+                      "by": parts[2] if len(parts) >= 4 else "",
+                      "file": parts[3] if len(parts) >= 4 else latest,
+                      "saved": latest, "path": f"paydrop/{period}/{corp}/{k}/", "custom": k}
+    except FileNotFoundError:
+        pass
+    fixed = {v: out.get(v) for v in PAYDROP_KINDS.values()}
+    extra = {k: v for k, v in out.items() if k not in fixed}
+    return {"ok": True, "kinds": {**fixed, **extra}}
 
 @app.get("/api/hr/paydrop/file")
 def paydrop_file(kind: str, period: str, saved: str, req: Request, corp: str = "KTC"):
     me(req)
     import re as _re
-    if kind not in PAYDROP_KINDS: raise HTTPException(400)
+    if kind not in PAYDROP_KINDS:
+        kind = os.path.basename((kind or "").strip())
+        if not kind or kind.startswith("."): raise HTTPException(400)
     if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400)
     fname = os.path.basename(saved)          # 防路徑跳脫
     fp = os.path.join(BASE, "paydrop", period, corp, kind, fname)

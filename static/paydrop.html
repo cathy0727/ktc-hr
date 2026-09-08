@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>薪資資料交付 | Kinetics 人事站</title>
+<style>
+:root{--ink:#22313A;--teal:#0E7A81;--teal-d:#0A5B61;--line:#DCE4E6;--grey:#8A98A3;--amber:#8A5A00;--green:#2E8B57;--red:#C0392B;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif;background:#F2F5F5;color:var(--ink);font-size:15px;line-height:1.7;}
+header{background:#1B2A31;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+header b{font-size:17px;}header b span{color:#4FC3C9;}
+header .note{font-size:12.5px;color:#B9C6CB;}
+main{max-width:980px;margin:0 auto;padding:24px 20px 60px;}
+h1{font-size:21px;margin-bottom:4px;}
+.lede{color:#5A6B76;margin-bottom:16px;max-width:70ch;font-size:14px;}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;}
+.bar label{font-size:13px;color:var(--grey);}
+.bar input,.bar select{font-family:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px;}
+.card h3{font-size:15.5px;margin-bottom:10px;}
+table{border-collapse:collapse;width:100%;font-size:14px;}
+th{text-align:left;color:var(--grey);font-weight:normal;font-size:13px;border-bottom:2px solid var(--line);padding:6px 8px;white-space:nowrap;}
+td{border-bottom:1px solid #EDF1F2;padding:6px 8px;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.chip{display:inline-block;border-radius:12px;padding:1px 10px;font-size:12px;white-space:nowrap;}
+.chip.ok{background:#E7F4EC;color:var(--green);}
+.chip.off{background:#EEF1F3;color:var(--grey);}
+.btn{border:1px solid var(--teal);color:var(--teal);background:#fff;border-radius:8px;padding:7px 16px;font-size:14px;font-family:inherit;cursor:pointer;}
+.btn:hover{background:#EAF5F5;}
+a.tpl{font-size:13px;color:var(--teal);}
+input[type=file]{font-size:13px;font-family:inherit;}
+.note{font-size:13px;color:#5A6B76;background:#F4FAFA;border-left:3px solid var(--teal);padding:8px 12px;margin-top:10px;max-width:76ch;}
+.msg{font-size:14px;margin-top:10px;}
+.msg.err{color:var(--red);}
+.msg.ok{color:var(--green);}
+.fname{color:#5A6B76;font-size:13px;}
+</style>
+</head>
+<body>
+<header>
+  <b>kinetics <span>人事站</span></b>
+  <div class="note">薪資資料交付 — 檔案原樣收存於保密交付區，HR 結算時自取匯入鼎新</div>
+</header>
+<main>
+<h1>薪資資料交付</h1>
+<p class="lede">每月結算前，將各項明細做成<b>鼎新 HR 匯入格式</b>後在此交付。系統只收檔與留交付紀錄，不檢核檔案內容；同期別同項目可重複交付，版本並存，HR 以最新一版為準。</p>
+
+<div class="bar">
+  <label>期別</label><input id="period" style="width:110px">
+  <label>公司</label>
+  <select id="corp"><option>KTC</option><option>KIC</option><option>CTC</option></select>
+  <button class="btn" onclick="loadStatus()">重新整理交付狀態</button>
+</div>
+
+<div class="card">
+  <h3>本月交付狀態</h3>
+  <table id="statusTbl">
+    <tr><th>項目</th><th>範本</th><th>上傳</th><th>版本</th><th>最後交付</th><th>狀態</th></tr>
+  </table>
+  <div class="msg" id="upMsg"></div>
+  <p class="note">「其他加扣項」放不屬於前兩類的零星項目（獎金、代扣款…），沒有就免交。期別預設為上個月（結算月）。</p>
+</div>
+
+</main>
+<script>
+const KINDS = [["phone","電話費明細"],["allowance","津貼明細"],["attend","出勤狀況"],["other","其他加扣項"]];
+
+(function init(){
+  const d = new Date();
+  d.setDate(1); d.setMonth(d.getMonth() - 1);   // 薪資作業＝月初做上個月
+  document.getElementById('period').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  loadStatus();
+})();
+
+function P(){ return document.getElementById('period').value.trim(); }
+function C(){ return document.getElementById('corp').value; }
+
+async function loadStatus(){
+  const t = document.getElementById('statusTbl');
+  let data = {};
+  try{
+    const r = await fetch(`/api/hr/paydrop/status?period=${encodeURIComponent(P())}&corp=${C()}`);
+    if(r.ok) data = (await r.json()).kinds || {};
+  }catch(e){}
+  t.innerHTML = '<tr><th>項目</th><th>範本</th><th>上傳</th><th>版本</th><th>最後交付</th><th>狀態</th></tr>';
+  for(const [k, name] of KINDS){
+    const s = data[name];
+    t.innerHTML += `<tr>
+      <td>${name}</td>
+      <td><a class="tpl" href="/api/hr/paydrop/template?kind=${k}">範本↓</a></td>
+      <td><input type="file" onchange="upload('${k}','${name}',this)"></td>
+      <td class="num">${s ? s.rows : '—'}</td>
+      <td>${s ? (s.at||'') + '　' + (s.by||'')
+        + (s.file ? `<br><a class="tpl" href="/api/hr/paydrop/file?kind=${k}&period=${encodeURIComponent(P())}&corp=${C()}&saved=${encodeURIComponent(s.saved||'')}">📄 ${s.file}</a>` : '')
+        + (s.path ? `<br><span class="fname">${s.path}</span>` : '') : '—'}</td>
+      <td>${s ? '<span class="chip ok">✓ 已交付</span>' : '<span class="chip off">未交</span>'}</td>
+    </tr>`;
+  }
+}
+
+async function upload(kind, name, inp){
+  const f = inp.files[0];
+  if(!f) return;
+  const m = document.getElementById('upMsg');
+  m.className = 'msg'; m.textContent = `交付中：${name}（${f.name}）…`;
+  const fd = new FormData(); fd.append('file', f);
+  let j = {};
+  try{
+    const r = await fetch(`/api/hr/paydrop/upload?kind=${kind}&period=${encodeURIComponent(P())}&corp=${C()}`, {method:'POST', body:fd});
+    j = await r.json();
+  }catch(e){}
+  inp.value = '';
+  if(!j.ok){
+    m.className = 'msg err'; m.textContent = (j.msg || '交付失敗，請重試') + `（${name}）`;
+    return;
+  }
+  m.className = 'msg ok';
+  m.textContent = `✓ 已收件：${name}（${f.name}）` + (j.valid ? `，參考筆數 ${j.valid}` : '');
+  loadStatus();
+}
+</script>
+</body>
+</html>

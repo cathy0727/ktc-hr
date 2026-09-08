@@ -1218,81 +1218,67 @@ def paydrop_template(kind: str, req: Request):
 async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC", file: UploadFile = File(...)):
     u = me(req)
     if kind not in PAYDROP_KINDS: raise HTTPException(400, "kind 不合法")
-    import re as _re
+    import re as _re, datetime as _dt, io as _io
     if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400, "期別格式應為 YYYY-MM")
-    import openpyxl
-    tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + ".xlsx")
-    with open(tmp, "wb") as f: f.write(await file.read())
+    fname = os.path.basename(file.filename or "upload.bin")
+    dest_dir = os.path.join(BASE, "paydrop", period, corp, kind)
+    os.makedirs(dest_dir, exist_ok=True)
+    ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    data = await file.read()
+    dest = os.path.join(dest_dir, f"{ts}_{u}_{fname}")
+    with open(dest, "wb") as f: f.write(data)
+    valid = 0  # 參考筆數，讀不懂不擋件
     try:
-        ws = openpyxl.load_workbook(tmp, data_only=True).active
+        import openpyxl
+        ws = openpyxl.load_workbook(_io.BytesIO(data), data_only=True, read_only=True).active
+        valid = sum(1 for row in ws.iter_rows(min_row=2, values_only=True)
+                    if row and not all(v in (None, "") for v in row))
     except Exception:
-        os.remove(tmp)
-        return JSONResponse({"ok": False, "msg": "檔案讀取失敗，請確認為 xlsx 格式"}, status_code=400)
-    os.remove(tmp)
-    emp = _emp_lookup()
-    rows, errors = [], []
-    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        if not row or all(v in (None, "") for v in row): continue
-        p, empno, name, item, amt = (list(row) + [None]*5)[:5]
-        empno = _norm_empno(empno)
-        name = str(name).strip() if name else ""
-        item = str(item).strip() if item else ""
-        msg = None
-        if str(p).strip() != period:
-            msg = f"期別不符（檔內 {p}）"
-        elif not empno:
-            msg = "工號空白"
-        elif emp is not None and empno not in emp:
-            msg = "查無此工號"
-        elif not item or "示例" in item:
-            msg = "項目空白或為示例列"
-        else:
-            try: amt = round(float(amt), 2)
-            except (TypeError, ValueError): msg = "金額不是數字"
-        r = {"row": i, "empno": empno, "name": (emp.get(empno) if emp and empno in emp else name),
-             "item": item, "amount": (amt if msg is None else str(amt))}
-        if msg: r["msg"] = msg; errors.append(r)
-        else: rows.append(r)
-    if not rows and not errors:
-        return JSONResponse({"ok": False, "msg": "檔內沒有資料列"}, status_code=400)
-    tok = secrets.token_urlsafe(12)
-    _paydrop_tmp[tok] = {"rows": rows, "kind": kind, "kindname": PAYDROP_KINDS[kind],
-                         "period": period, "corp": corp, "fname": file.filename or "", "user": u}
-    if len(_paydrop_tmp) > 20:
-        for k in list(_paydrop_tmp)[:-20]: _paydrop_tmp.pop(k, None)
-    return {"ok": True, "token": tok, "valid": len(rows), "errors": errors,
-            "emp_checked": emp is not None, "preview": rows[:50],
-            "total_amount": round(sum(r["amount"] for r in rows), 2)}
+        pass
+    cn = db(); cur = cn.cursor()
+    cur.execute("INSERT INTO rec.event(EventType, Payload) VALUES('paydrop_deliver', ?)",
+                json.dumps({"kind": PAYDROP_KINDS[kind], "period": period, "corp": corp,
+                            "file": fname[:190], "saved": os.path.basename(dest),
+                            "rows": valid, "by": u}, ensure_ascii=False))
+    cn.commit(); cn.close()
+    return {"ok": True, "token": secrets.token_urlsafe(12), "valid": valid, "errors": [],
+            "emp_checked": False, "preview": [], "total_amount": 0,
+            "msg": f"已收件：{fname}"}
 
 @app.post("/api/hr/paydrop/commit")
 async def paydrop_commit(req: Request):
-    u = me(req)
-    body = await req.json()
-    st = _paydrop_tmp.pop(body.get("token", ""), None)
-    if not st: raise HTTPException(404, "預覽已過期，請重新上傳")
-    cn = db_pay(); cur = cn.cursor()
-    cur.execute("DELETE FROM pay.pay_item_staging WHERE Period=? AND CorporationId=? AND SourceKind=?",
-                st["period"], st["corp"], st["kindname"])
-    for r in st["rows"]:
-        cur.execute("""INSERT INTO pay.pay_item_staging(Period, CorporationId, SourceKind, EmpNo, EmpName, ItemName, Amount, SourceFile, UploadedBy)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                    st["period"], st["corp"], st["kindname"], r["empno"], r["name"], r["item"], r["amount"],
-                    st["fname"][:190], u)
-    cn.commit(); cn.close()
-    cn2 = db(); c2 = cn2.cursor()   # rec 圈只留「交了幾筆」，零金額
-    c2.execute("INSERT INTO rec.event(EventType, Payload) VALUES('paydrop_commit', ?)",
-               json.dumps({"kind": st["kindname"], "period": st["period"], "corp": st["corp"],
-                           "rows": len(st["rows"]), "by": u}, ensure_ascii=False))
-    cn2.commit(); cn2.close()
-    return {"ok": True, "rows": len(st["rows"])}
+    me(req)
+    try: await req.json()
+    except Exception: pass
+    return {"ok": True, "rows": 0}
 
 @app.get("/api/hr/paydrop/status")
 def paydrop_status(period: str, req: Request, corp: str = "KTC"):
     me(req)
-    cn = db_pay(); cur = cn.cursor()
-    cur.execute("""SELECT SourceKind, COUNT(*) AS n, MAX(UploadedAt) AS t, MAX(UploadedBy) AS b, MAX(SourceFile) AS f
-                   FROM pay.pay_item_staging WHERE Period=? AND CorporationId=? GROUP BY SourceKind""",
-                period, corp)
-    out = {r.SourceKind: {"rows": r.n, "at": str(r.t)[:16], "by": r.b, "file": r.f} for r in cur.fetchall()}
-    cn.close()
+    import datetime as _dt
+    out = {}
+    for k, name in PAYDROP_KINDS.items():
+        d = os.path.join(BASE, "paydrop", period, corp, k)
+        try: fs = sorted(f for f in os.listdir(d) if not f.startswith("."))
+        except FileNotFoundError: continue
+        if not fs: continue
+        latest = fs[-1]
+        t = _dt.datetime.fromtimestamp(os.path.getmtime(os.path.join(d, latest)))
+        parts = latest.split("_", 3)
+        out[name] = {"rows": len(fs), "at": t.strftime("%Y-%m-%d %H:%M"),
+                     "by": parts[2] if len(parts) >= 4 else "",
+                     "file": parts[3] if len(parts) >= 4 else latest, "saved": latest, "path": f"paydrop/{period}/{corp}/{k}/"}
     return {"ok": True, "kinds": {v: out.get(v) for v in PAYDROP_KINDS.values()}}
+
+@app.get("/api/hr/paydrop/file")
+def paydrop_file(kind: str, period: str, saved: str, req: Request, corp: str = "KTC"):
+    me(req)
+    import re as _re
+    if kind not in PAYDROP_KINDS: raise HTTPException(400)
+    if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400)
+    fname = os.path.basename(saved)          # 防路徑跳脫
+    fp = os.path.join(BASE, "paydrop", period, corp, kind, fname)
+    if not os.path.isfile(fp): raise HTTPException(404, "檔案不存在")
+    parts = fname.split("_", 3)
+    dl = parts[3] if len(parts) >= 4 else fname
+    return FileResponse(fp, filename=dl)

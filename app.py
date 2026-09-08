@@ -68,7 +68,7 @@ def candidates(req: Request):
     me(req)
     cn = db(); cur = cn.cursor()
     cur.execute("""SELECT c.Id, c.CorporationId, c.Name, c.JobTitle, c.Stage,
-                          i.FormDoneAt, i.ExamScore, c.CreatedAt, c.ResumePath
+                          i.FormDoneAt, i.ExamScore, c.CreatedAt, c.ResumePath, c.MailPath
                    FROM rec.candidate c LEFT JOIN rec.interview i ON i.CandidateId=c.Id
                    ORDER BY c.Id DESC""")
     data = cur.fetchall()
@@ -88,6 +88,7 @@ def candidates(req: Request):
              "stage": r.Stage, "form_done": bool(r.FormDoneAt),
              "created": r.CreatedAt.strftime("%Y/%m/%d %H:%M") if r.CreatedAt else "",
              "has_resume": bool(r.ResumePath),
+             "has_mail": bool(r.MailPath),
              "score": float(r.ExamScore) if r.ExamScore is not None else None,
              "tickets": {"apply": _tick(r.Id, "apply", bool(r.FormDoneAt)),
                           "exam": _tick(r.Id, "exam", r.ExamScore is not None),
@@ -116,7 +117,7 @@ async def gen_token(req: Request):
     if kind not in ("apply","exam") or not cid: raise HTTPException(400)
     t = secrets.token_urlsafe(18)
     cn = db(); cur = cn.cursor()
-    cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?,?,?,DATEADD(HOUR,8,SYSDATETIME()))",
+    cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?,?,?,DATEADD(DAY,3,SYSDATETIME()))",
                 t, kind, cid)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('token_issued',?,?)", cid, kind+" by "+u)
     cn.commit(); cn.close()
@@ -317,6 +318,23 @@ def resume(cid: int, req: Request):
         raise HTTPException(404)
     return FileResponse(fp, media_type="application/pdf",
                         headers={"Content-Disposition": f"inline; filename=resume_{cid}.pdf"})
+
+@app.get("/api/hr/mail/{cid}")
+def mail_view(cid: int, req: Request):
+    me(req)
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT MailPath FROM rec.candidate WHERE Id=?", cid)
+    r = cur.fetchone(); cn.close()
+    if not r or not r.MailPath:
+        raise HTTPException(404)
+    fp = r.MailPath
+    if not os.path.isfile(fp):
+        raise HTTPException(404)
+    # CSP：來信 HTML 不可信，禁腳本禁表單送出，只准圖片與行內樣式
+    return FileResponse(fp, media_type="text/html; charset=utf-8",
+                        headers={"Content-Security-Policy":
+                                 "default-src 'none'; img-src * data:; style-src 'unsafe-inline'",
+                                 "Content-Disposition": f"inline; filename=mail_{cid}.html"})
 
 # ══ 錄取段（Phase A）：錄取通知信＋onboard token＋留痕 ══
 SITE_INFO = {
@@ -1124,6 +1142,12 @@ def flow_page():
     if not os.path.isfile(fp): raise HTTPException(404)
     return FileResponse(fp, media_type="text/html")
 
+@app.get("/guide")
+def guide_page():
+    fp = os.path.join(BASE, "static", "sop_forms.html")
+    if not os.path.isfile(fp): raise HTTPException(404)
+    return FileResponse(fp, media_type="text/html")
+
 @app.post("/api/hr/confirm2")
 async def confirm2(req: Request):
     """人事收到複試回覆後手動確認出席"""
@@ -1141,3 +1165,134 @@ async def confirm2(req: Request):
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('reinterview_confirmed', ?, ?)", cid, u)
     cn.commit(); cn.close()
     return {"ok": True}
+
+# ══ 薪資資料交付（人事窗口：上傳浮動明細 → pay.pay_item_staging；窄通道只進不出）══
+PAYDROP_KINDS = {"phone": "電話費明細", "allowance": "津貼明細", "attend": "出勤狀況", "other": "其他加扣項"}
+_paydrop_tmp = {}   # 預覽暫存 token -> 批次內容（commit 後即丟）
+
+def _emp_lookup():
+    """自 v_EmployeeList 取工號→姓名對照（欄名自動偵測；失敗回 None＝略過存在性檢查）"""
+    try:
+        cn = db(); cur = cn.cursor()
+        cur.execute("SELECT TOP 1 * FROM HR.dbo.v_EmployeeList")
+        cols = [str(d[0]) for d in cur.description]
+        no = next((c for c in cols if "工號" in c or c.lower() in ("empno","employeeno","empcode","employeeid")), None)
+        nm = next((c for c in cols if "姓名" in c or c.lower() in ("empname","employeename","name")), None)
+        if not no:
+            cn.close(); return None
+        cur.execute(f"SELECT [{no}]" + (f", [{nm}]" if nm else "") + " FROM HR.dbo.v_EmployeeList")
+        d = {}
+        for r in cur.fetchall():
+            k = str(r[0]).strip()
+            if k: d[k] = (str(r[1]).strip() if nm and r[1] is not None else "")
+        cn.close(); return d
+    except Exception:
+        return None
+
+def _norm_empno(v):
+    s = str(v).strip() if v is not None else ""
+    if s.endswith(".0"): s = s[:-2]
+    if s.isdigit(): s = s.zfill(4)      # Excel 吃掉前導零：23 → 0023
+    return s
+
+@app.get("/paydrop")
+def paydrop_page(req: Request):
+    me(req)
+    return FileResponse(os.path.join(BASE, "static", "paydrop.html"))
+
+@app.get("/api/hr/paydrop/template")
+def paydrop_template(kind: str, req: Request):
+    me(req)
+    if kind not in PAYDROP_KINDS: raise HTTPException(400)
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "明細"
+    ws.append(["期別", "工號", "姓名", "項目", "金額"])
+    ws.append(["2026-09", "0023", "楊月寬", "（示例列，請刪除）", 0])
+    for i, w in enumerate([10, 8, 10, 18, 10]): ws.column_dimensions[chr(65+i)].width = w
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=paydrop_{kind}.xlsx"})
+
+@app.post("/api/hr/paydrop/upload")
+async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC", file: UploadFile = File(...)):
+    u = me(req)
+    if kind not in PAYDROP_KINDS: raise HTTPException(400, "kind 不合法")
+    import re as _re
+    if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400, "期別格式應為 YYYY-MM")
+    import openpyxl
+    tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + ".xlsx")
+    with open(tmp, "wb") as f: f.write(await file.read())
+    try:
+        ws = openpyxl.load_workbook(tmp, data_only=True).active
+    except Exception:
+        os.remove(tmp)
+        return JSONResponse({"ok": False, "msg": "檔案讀取失敗，請確認為 xlsx 格式"}, status_code=400)
+    os.remove(tmp)
+    emp = _emp_lookup()
+    rows, errors = [], []
+    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row or all(v in (None, "") for v in row): continue
+        p, empno, name, item, amt = (list(row) + [None]*5)[:5]
+        empno = _norm_empno(empno)
+        name = str(name).strip() if name else ""
+        item = str(item).strip() if item else ""
+        msg = None
+        if str(p).strip() != period:
+            msg = f"期別不符（檔內 {p}）"
+        elif not empno:
+            msg = "工號空白"
+        elif emp is not None and empno not in emp:
+            msg = "查無此工號"
+        elif not item or "示例" in item:
+            msg = "項目空白或為示例列"
+        else:
+            try: amt = round(float(amt), 2)
+            except (TypeError, ValueError): msg = "金額不是數字"
+        r = {"row": i, "empno": empno, "name": (emp.get(empno) if emp and empno in emp else name),
+             "item": item, "amount": (amt if msg is None else str(amt))}
+        if msg: r["msg"] = msg; errors.append(r)
+        else: rows.append(r)
+    if not rows and not errors:
+        return JSONResponse({"ok": False, "msg": "檔內沒有資料列"}, status_code=400)
+    tok = secrets.token_urlsafe(12)
+    _paydrop_tmp[tok] = {"rows": rows, "kind": kind, "kindname": PAYDROP_KINDS[kind],
+                         "period": period, "corp": corp, "fname": file.filename or "", "user": u}
+    if len(_paydrop_tmp) > 20:
+        for k in list(_paydrop_tmp)[:-20]: _paydrop_tmp.pop(k, None)
+    return {"ok": True, "token": tok, "valid": len(rows), "errors": errors,
+            "emp_checked": emp is not None, "preview": rows[:50],
+            "total_amount": round(sum(r["amount"] for r in rows), 2)}
+
+@app.post("/api/hr/paydrop/commit")
+async def paydrop_commit(req: Request):
+    u = me(req)
+    body = await req.json()
+    st = _paydrop_tmp.pop(body.get("token", ""), None)
+    if not st: raise HTTPException(404, "預覽已過期，請重新上傳")
+    cn = db_pay(); cur = cn.cursor()
+    cur.execute("DELETE FROM pay.pay_item_staging WHERE Period=? AND CorporationId=? AND SourceKind=?",
+                st["period"], st["corp"], st["kindname"])
+    for r in st["rows"]:
+        cur.execute("""INSERT INTO pay.pay_item_staging(Period, CorporationId, SourceKind, EmpNo, EmpName, ItemName, Amount, SourceFile, UploadedBy)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    st["period"], st["corp"], st["kindname"], r["empno"], r["name"], r["item"], r["amount"],
+                    st["fname"][:190], u)
+    cn.commit(); cn.close()
+    cn2 = db(); c2 = cn2.cursor()   # rec 圈只留「交了幾筆」，零金額
+    c2.execute("INSERT INTO rec.event(EventType, Payload) VALUES('paydrop_commit', ?)",
+               json.dumps({"kind": st["kindname"], "period": st["period"], "corp": st["corp"],
+                           "rows": len(st["rows"]), "by": u}, ensure_ascii=False))
+    cn2.commit(); cn2.close()
+    return {"ok": True, "rows": len(st["rows"])}
+
+@app.get("/api/hr/paydrop/status")
+def paydrop_status(period: str, req: Request, corp: str = "KTC"):
+    me(req)
+    cn = db_pay(); cur = cn.cursor()
+    cur.execute("""SELECT SourceKind, COUNT(*) AS n, MAX(UploadedAt) AS t, MAX(UploadedBy) AS b, MAX(SourceFile) AS f
+                   FROM pay.pay_item_staging WHERE Period=? AND CorporationId=? GROUP BY SourceKind""",
+                period, corp)
+    out = {r.SourceKind: {"rows": r.n, "at": str(r.t)[:16], "by": r.b, "file": r.f} for r in cur.fetchall()}
+    cn.close()
+    return {"ok": True, "kinds": {v: out.get(v) for v in PAYDROP_KINDS.values()}}

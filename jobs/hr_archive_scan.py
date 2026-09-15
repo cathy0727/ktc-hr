@@ -6,7 +6,12 @@ import pymssql
 SRC = Path.home() / 'mnt/hr_src/03_人事總務行政/【人事】'
 DST = Path.home() / 'mnt/KTC_AI_Files/人事歸檔'
 SKIP = {'thumbs.db', '.ds_store', 'desktop.ini'}
-CERT_KW = ('證照', '證書', '訓練', '結業', 'ISO')
+CERT_KW = ('證照', '證書', '訓練', '結業', 'ISO', '回訓', '技術士', '技術證', '職安卡')
+CATS = [('證件(基本)', ('身分證', '身份證', '健保卡', '健保IC', '雙證件')),
+        ('證件(其他)', ('護照', '台胞證', '台胞卡', '良民證', '駕照', '駕駛執照',
+                  '存摺', '大頭照', '退伍', '戶口', '戶籍', '畢業證書', '學歷')),
+        ('健檢', ('健檢', '體檢')),
+        ('保險', ('團保', '投保', '理賠', '旅平險', '加保', '退保'))]
 EXCLUDE_TOP = ('B427+0495+B495+B592 Stacy+公用(RUBY+JOY)',
                '08-系統操作_鼎新HR_EasyFlow', '契約審查技巧',
                '客戶滿意度調查表', '06-公司制度與合規管理')
@@ -70,7 +75,9 @@ for f in SRC.rglob('*'):
         basis = '未識別'
     stats['未識別' if basis == '未識別' else basis] = stats.get(basis if basis != '未識別' else '未識別', 0) + 1
 
-    cat = '證照' if any(k in rel for k in CERT_KW) else ''
+    cat = next((c for c, kws in CATS if any(k in f.name for k in kws)), '')
+    if not cat and any(k in rel for k in CERT_KW):
+        cat = '證照'
     if basis in ('工號', '姓名'):
         dest = f'依員工/{emp_code}_{emp_name}/' + (f'{cat}/' if cat else '') + f.name
     else:

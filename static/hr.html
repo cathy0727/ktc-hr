@@ -9,13 +9,14 @@ body{font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:#F1F5F
 .tabs{display:flex;gap:2px;background:#fff;border-bottom:1px solid var(--line);padding:0 16px;}
 .tabs button{border:none;background:none;font-size:14.5px;padding:12px 16px;cursor:pointer;color:var(--soft);border-bottom:3px solid transparent;}
 .tabs button.on{color:#0E7A81;border-bottom-color:var(--teal);font-weight:700;}
+.subfr{width:100%;height:calc(100vh - 118px);border:none;background:#fff;display:block;}
 .wrap{max-width:1100px;margin:0 auto;padding:18px 20px;}
 .pg{display:none;} .pg.on{display:block;}
 .card{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:14px;overflow:hidden;}
 .card h2{font-size:15px;padding:11px 15px;border-bottom:1px solid var(--line);margin:0;display:flex;align-items:center;gap:10px;}
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{text-align:left;color:var(--soft);font-weight:500;font-size:12px;padding:8px 11px;background:#FAFCFC;border-bottom:1px solid var(--line);}
-td{padding:8px 11px;border-bottom:1px solid #EFF4F5;}
+td{padding:6px 11px;border-bottom:1px solid #EFF4F5;}
 .b{display:inline-block;border-radius:13px;padding:2px 10px;font-size:11.5px;font-weight:600;}
 .b-run{background:#E8F4F5;color:#0E7A81;} .b-ok{background:#E5F3EA;color:#2E8B57;} .b-off{background:#EEF1F3;color:#8A98A3;}
 button.act{background:none;border:1.5px solid var(--teal);color:var(--teal);border-radius:8px;font-size:12.5px;padding:5px 11px;cursor:pointer;margin-right:4px;;padding:4px 9px;font-size:12.5px;margin:1px 0}
@@ -25,20 +26,27 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
 .drop{border:2px dashed var(--teal);border-radius:10px;padding:22px;text-align:center;color:var(--soft);margin:14px;cursor:pointer;}
 #exMsg{padding:0 15px 12px;font-size:13.5px;white-space:pre-wrap;}
 .ok{color:#2E8B57;} .err{color:#C0392B;}
+body.ro .act:not(.keep),body.ro .pri{opacity:.4;filter:grayscale(1);cursor:not-allowed;}
+body.ro .rwonly{opacity:.5;}
+body.ro .drop{pointer-events:none;}
+.seg{border:1px solid var(--line);background:#fff;border-radius:14px;padding:4px 12px;font-size:12px;color:var(--soft);cursor:pointer;white-space:nowrap;}
+.seg.on{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:700;}
 .urlbox{background:#F4F8F9;border:1px dashed var(--teal);border-radius:8px;padding:8px 10px;font-size:12px;word-break:break-all;margin:6px 15px;display:none;}
 </style></head><body>
 <div class="top"><img src="/static/logo-img"><b>人事站</b><span style="font-size:11px;color:#F2C14E">rec 圈・9100</span>
-<a href="/flow" target="_blank" style="margin-left:14px;font-size:12.5px;color:#7FD6DB;text-decoration:none;border:1px solid #3A4A52;border-radius:14px;padding:2px 12px">🗺 流程說明</a>
 <span class="me" id="who"></span><a href="/logout">登出</a></div>
 <div class="tabs">
 <button class="on" onclick="tab(this,'p-rec');loadCand()">招募看板</button>
 <button onclick="tab(this,'p-exam');loadSets()">題庫管理</button>
+<button onclick="tab(this,'p-pay');fr('p-pay')">💰 人事資料交付</button>
+<button onclick="tab(this,'p-guide');fr('p-guide')">📘 表單作業說明</button>
+<button onclick="tab(this,'p-flow');fr('p-flow')">🗺 流程說明</button>
 </div>
 <div class="wrap">
 <div class="pg on" id="p-rec">
   <div class="card">
-    <h2>新增應徵者</h2>
-    <div class="newrow">
+    <h2 class="rwonly">新增應徵者</h2>
+    <div class="newrow rwonly">
       <select id="nCorp"><option>KTC</option><option>KIC</option><option>CTC</option></select>
       <input id="nName" placeholder="姓名" style="width:140px">
       <input id="nJob" placeholder="應徵職務（含職能字自動對卷）" style="width:260px">
@@ -120,7 +128,17 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
     <div id="hireMsg" style="padding:0 15px 12px;font-size:13.5px"></div>
   </div>
   <div class="card">
-    <h2>應徵者管線</h2>
+    <h2>應徵者管線<span id="candCnt" style="font-size:12px;color:var(--soft);font-weight:400"></span>
+      <span style="margin-left:auto;display:flex;gap:4px">
+        <button class="seg on" data-seg="new" onclick="setSeg('new',this)">近 5 天</button>
+        <button class="seg" data-seg="old" onclick="setSeg('old',this)">5 天前</button>
+        <button class="seg" data-seg="all" onclick="setSeg('all',this)">全部</button>
+      </span>
+      <input id="candQ" placeholder="搜尋姓名／職務" oninput="renderCand()"
+             style="font-size:12.5px;padding:5px 9px;width:150px">
+      <select id="candSt" onchange="renderCand()" style="font-size:12.5px;padding:5px">
+        <option value="">全部狀態</option></select>
+    </h2>
     <div class="urlbox" id="urlBox"></div>
     <table><thead><tr><th>#</th><th>公司</th><th>姓名</th><th>應徵職務</th><th>收件時間</th><th>狀態</th><th>填表進度</th><th>產生連結</th></tr></thead>
     <tbody id="candRows"><tr><td colspan="8">載入中…</td></tr></tbody></table>
@@ -129,19 +147,33 @@ input,select{font-size:14px;padding:8px;border:1.5px solid var(--line);border-ra
 <div class="pg" id="p-exam">
   <div class="card">
     <h2>職能題庫<span style="font-size:12px;color:var(--soft);font-weight:400">應徵職務含職能字自動對卷・上傳整卷覆蓋・新職能自動開卷</span></h2>
-    <table><thead><tr><th>職能（對卷關鍵字）</th><th>卷名</th><th>題數</th><th>作答分鐘</th></tr></thead>
+    <table><thead><tr><th>職能（對卷關鍵字）</th><th>卷名</th><th>題數</th><th>作答分鐘</th><th style="width:60px"></th></tr></thead>
     <tbody id="setRows"><tr><td colspan="4">載入中…</td></tr></tbody></table>
-    <div class="drop" onclick="document.getElementById('exF').click()"><span id="exName">點此選擇題庫 Excel（.xlsx）上傳匯入</span></div>
-    <input type="file" id="exF" accept=".xlsx" style="display:none" onchange="upExam()">
+    <div class="drop rwonly" onclick="document.getElementById('exF').click()"><span id="exName">點此選擇題庫檔上傳匯入（Excel 範本／Word・PDF 由 AI 解析）</span></div>
+    <input type="file" id="exF" accept=".xlsx,.docx,.pdf" style="display:none" onchange="upExam()">
+    <div style="margin-top:10px;text-align:right" class="rwonly"><button class="act" onclick="clearExam()">🗑 清空全部題庫</button></div>
     <div id="exMsg"></div>
   </div>
 </div>
 </div>
+<div class="pg" id="p-pay"><iframe class="subfr" data-src="/paydrop"></iframe></div>
+<div class="pg" id="p-guide"><iframe class="subfr" data-src="/guide"></iframe></div>
+<div class="pg" id="p-flow"><iframe class="subfr" data-src="/flow"></iframe></div>
 <script>
+function fr(id){const f=document.querySelector('#'+id+' iframe');if(f&&!f.src)f.src=f.dataset.src;}
 function tab(b,id){document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
 document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.getElementById(id).classList.add('on');}
 loadCand();
-fetch('/api/hr/me').then(r=>r.json()).then(j=>document.getElementById('who').textContent=j.user+'・AD 已驗證');
+fetch('/api/hr/me').then(r=>r.json()).then(j=>{
+  document.getElementById('who').textContent=j.user+(j.rw===false?'・唯讀':'・AD 已驗證');
+  if(j.rw===false){
+    document.body.classList.add('ro');
+    document.addEventListener('click',e=>{
+      const t=e.target.closest('.act:not(.keep),.pri');
+      if(t){e.preventDefault();e.stopPropagation();alert('唯讀帳號，沒有執行權限');}
+    },true);
+  }
+});
 
 let invId = 0, invRound = 1;
 async function openInv(id, name, round){
@@ -201,7 +233,8 @@ function tickets(c){
 }
 function acts(c){
   const s = c.stage || '';
-  let h = c.has_resume ? `<button class="act" onclick="window.open('/api/hr/resume/${c.id}')">📄 履歷</button>` : '';
+  let h = c.has_resume ? `<button class="act keep" onclick="window.open('/api/hr/resume/${c.id}')">📄 履歷</button>` : '';
+  if(c.has_mail) h += `<button class="act keep" onclick="window.open('/api/hr/mail/${c.id}')">📩 原信</button>`;
   if(s === '錄取')
     return h + `<button class="act" style="border-color:#B7791F;color:#B7791F" onclick="openResch(${c.id},'${c.name}')">📅 改期</button>`;
   if(s === '錄取簽核中')
@@ -364,10 +397,24 @@ async function sendHire(){
   } else { m.textContent = '✗ ' + (j.msg || '失敗，欄位是否齊全？'); }
   m.className = j.ok ? 'ok' : 'err';
 }
+let ALLC = [], SHOWALL = false, SEG = 'new';
+function setSeg(s,btn){SEG=s;document.querySelectorAll('.seg').forEach(b=>b.classList.toggle('on',b===btn));SHOWALL=false;renderCand();}
+function candTime(c){
+  const m=/(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/.exec(c.created||'');
+  return m?new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0)).getTime():0;
+}
+const KNOWN_ST = ['已報到','複試邀約中','已確認複試','擬錄取待回覆','薪資核定中','薪資已核定','錄取簽核中','不錄取','錄取','已確認出席','需改期','已回覆','已邀約'];
+const stOf = c => KNOWN_ST.includes(c.stage) ? c.stage : '新履歷';
 async function loadCand(){
   const r=await fetch('/api/hr/candidates'); const j=await r.json();
-  document.getElementById('candRows').innerHTML=j.rows.map(c=>
-    `<tr><td>${c.id}</td><td>${c.corp}</td><td>${c.name}</td><td>${c.job||''}</td><td style="color:var(--soft)">${c.created||''}</td><td>${
+  ALLC = j.rows;
+  const sel=document.getElementById('candSt'), cur=sel.value;
+  const sts=[...new Set(ALLC.map(stOf))];
+  sel.innerHTML='<option value="">全部狀態</option>'+sts.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join('');
+  renderCand();
+}
+function candRow(c){
+  return `<tr><td>${c.id}</td><td>${c.corp}</td><td>${c.name}</td><td>${c.job||''}</td><td style="color:var(--soft)">${c.created||''}</td><td>${
   c.stage==='已報到'?'<span class="b" style="background:#E5F3EA;color:#1D6F42;font-weight:800">🏢 已報到</span>':
   c.stage==='複試邀約中'?'<span class="b" style="background:#F5EEE0;color:#8A5A00;font-weight:700">🔁 複試邀約中</span>':
   c.stage==='已確認複試'?'<span class="b" style="background:#E5F3EA;color:#2E8B57;font-weight:700">✓ 確認複試</span>':
@@ -383,8 +430,24 @@ async function loadCand(){
   c.stage==='已邀約'?'<span class="b b-run">已邀約</span>':
   '<span class="b b-off">新履歷</span>'}</td>
     <td style="white-space:nowrap">${tickets(c)}</td>
-    <td style="white-space:nowrap">${acts(c)}</td></tr>`).join('')
-    || '<tr><td colspan="8">尚無應徵者</td></tr>';
+    <td style="white-space:nowrap">${acts(c)}</td></tr>`;
+}
+function renderCand(){
+  const q=(document.getElementById('candQ').value||'').trim().toLowerCase();
+  const st=document.getElementById('candSt').value;
+  const cut7=Date.now()-5*86400000;
+  const tNew=ALLC.filter(c=>candTime(c)>=cut7).length;
+  const lbl={new:'近 5 天 '+tNew,old:'5 天前 '+(ALLC.length-tNew),all:'全部 '+ALLC.length};
+  document.querySelectorAll('.seg').forEach(b=>{b.textContent=lbl[b.dataset.seg];});
+  let rows=ALLC.filter(c=>(SEG==='all'||(SEG==='new'?candTime(c)>=cut7:candTime(c)<cut7))
+    &&(!st||stOf(c)===st)&&(!q||((c.name||'')+(c.job||'')).toLowerCase().includes(q)));
+  const total=rows.length, LIM=50;
+  const cut=(!SHOWALL && rows.length>LIM);
+  if(cut) rows=rows.slice(0,LIM);
+  document.getElementById('candCnt').textContent=' 共 '+ALLC.length+' 名'+((q||st)?'・符合 '+total:'');
+  document.getElementById('candRows').innerHTML=(rows.map(candRow).join('')
+    +(cut?`<tr><td colspan="8" style="text-align:center;padding:10px"><button class="act keep" onclick="SHOWALL=true;renderCand()">顯示全部 ${total} 名</button></td></tr>`:''))
+    ||'<tr><td colspan="8">尚無應徵者</td></tr>';
 }
 async function addCand(){
   const name=document.getElementById('nName').value.trim(), job=document.getElementById('nJob').value.trim();
@@ -405,17 +468,64 @@ async function tok(id,kind){
 async function loadSets(){
   const r=await fetch('/api/hr/exam/sets'); const j=await r.json();
   document.getElementById('setRows').innerHTML=j.sets.map(s=>
-    `<tr><td><span class="b b-run">${s.jf}</span></td><td>${s.title}</td><td>${s.cnt}</td><td>${s.tmin}</td></tr>`).join('')
-    || '<tr><td colspan="4">尚無題庫</td></tr>';
+    `<tr style="cursor:pointer" title="點擊展開題目" onclick="toggleQs('${s.jf}',this)">
+     <td><span class="b b-run">${s.jf}</span></td><td>${s.title} <span style="color:var(--soft);font-size:11px">▾ 點看題目</span></td><td>${s.cnt}</td><td>${s.tmin}</td>
+     <td><button class="act" title="刪除此卷" onclick="event.stopPropagation();delSet('${s.jf}')">🗑</button></td></tr>`).join('')
+    || '<tr><td colspan="5">尚無題庫（同職能重新上傳＝整卷置換）</td></tr>';
+}
+function escQ(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+async function toggleQs(jf, tr){
+  const nxt=tr.nextElementSibling;
+  if(nxt && nxt.classList.contains('qrow')){ nxt.remove(); return; }
+  document.querySelectorAll('tr.qrow').forEach(e=>e.remove());
+  const r=await fetch('/api/hr/exam/questions?jf='+encodeURIComponent(jf));
+  if(!r.ok) return;
+  const j=await r.json();
+  const html=j.questions.map(q=>`<div style="margin:6px 0;padding:8px 12px;background:#F7FAFB;border-radius:8px;line-height:1.7">
+    <b>${q.seq}.</b> ${escQ(q.prompt)}<br>
+    ${q.options.map((o,i)=>`<span style="margin-right:16px;${'ABCD'[i]===q.answer?'color:#2E8B57;font-weight:700':''}">${'ABCD'[i]}. ${escQ(o)}${'ABCD'[i]===q.answer?' ✓':''}</span>`).join('')}
+    <span style="color:var(--soft);font-size:12px">（${q.points} 分）</span></div>`).join('');
+  const d=document.createElement('tr'); d.className='qrow';
+  d.innerHTML='<td colspan="5" style="background:#FCFEFE">'+html+'</td>';
+  tr.after(d);
+}
+async function delSet(jf){
+  if(!confirm('刪除「'+jf+'」整卷？該職能的題目會全部移除。\n（要換題不用刪：同職能再上傳一次即自動整卷置換）'))return;
+  const m=document.getElementById('exMsg');
+  const r=await fetch('/api/hr/exam/delete?jf='+encodeURIComponent(jf),{method:'POST'});
+  const j=await r.json();
+  m.textContent=j.ok?'✓ '+j.msg:'✗ '+(j.msg||'失敗'); m.className=j.ok?'ok':'err';
+  loadSets();
 }
 async function upExam(){
   const f=document.getElementById('exF').files[0]; if(!f)return;
   document.getElementById('exName').textContent=f.name;
-  const m=document.getElementById('exMsg'); m.textContent='匯入中…'; m.className='';
+  const ext=(f.name.split('.').pop()||'').toLowerCase();
+  let url='/api/hr/exam/upload';
+  if(ext==='docx'||ext==='pdf'){
+    const jf=prompt('這份考卷的職能關鍵字（例：會計、機構設計）\n留空＝由 AI 從卷內判斷','');
+    if(jf===null){document.getElementById('exF').value='';return;}
+    if(jf.trim()) url+='?jf='+encodeURIComponent(jf.trim());
+  }
+  const m=document.getElementById('exMsg');
+  m.textContent=(ext==='xlsx')?'匯入中…（範本直接匯入；非範本自動轉 AI 解析，約 30～60 秒）':'AI 解析中…（Word/PDF 約需 30～60 秒）'; m.className='';
   const fd=new FormData(); fd.append('file',f);
-  const r=await fetch('/api/hr/exam/upload',{method:'POST',body:fd});
+  try{
+    const r=await fetch(url,{method:'POST',body:fd});
+    const j=await r.json();
+    m.textContent=j.ok?'✓ '+j.msg:'✗ '+(j.msg||'失敗'); m.className=j.ok?'ok':'err';
+    if(j.ok) loadSets();
+  }catch(e){m.textContent='✗ 連線失敗，請重試'; m.className='err';}
+  document.getElementById('exF').value='';
+}
+async function clearExam(){
+  if(!confirm('確定要清空「全部」題庫？所有職能的卷與題目都會刪除。'))return;
+  const t=prompt('第二次確認：輸入「清空」兩字才會執行','');
+  if(t!=='清空'){alert('已取消');return;}
+  const m=document.getElementById('exMsg'); m.textContent='清空中…'; m.className='';
+  const r=await fetch('/api/hr/exam/clear',{method:'POST'});
   const j=await r.json();
   m.textContent=j.ok?'✓ '+j.msg:'✗ '+(j.msg||'失敗'); m.className=j.ok?'ok':'err';
-  if(j.ok) loadSets();
+  loadSets();
 }
 </script></body></html>

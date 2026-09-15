@@ -42,30 +42,6 @@ def parse_subject(subj, sender_name):
         if cand: name = cand[:20]
     return (name or (subj or "未知")[:20]), (job or "")
 
-
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-
-def _own_addr(addr):
-    """非應徵者本人的信箱：空值、104 系統、公司網域"""
-    a = (addr or "").lower()
-    return (not a) or ("104.com" in a) or ("@kinetics.com.tw" in a)
-
-def extract_body_email(text):
-    """從信件/履歷 HTML 內文抽應徵者信箱：mailto 優先、E-mail 標籤鄰近次之"""
-    if not text:
-        return None
-    from html import unescape
-    text = unescape(text)
-    for mm in re.finditer(r"mailto:([^\"'?&<> ]+)", text):
-        if not _own_addr(mm.group(1)):
-            return mm.group(1)
-    for mm in re.finditer(r"E-?mail", text, re.I):
-        seg = re.sub(r"<[^>]+>", " ", text[mm.end():mm.end()+300])
-        em = EMAIL_RE.search(seg)
-        if em and not _own_addr(em.group(0)):
-            return em.group(0)
-    return None
-
 REPLY_PAT = re.compile(r"^(Re:|RE:|回覆[:：]|Fw:|FW:|轉寄[:：])|面試邀請")
 
 def handle_reply(cur, m, sender):
@@ -184,14 +160,11 @@ def main():
                 _bt = re.sub(r"<[^>]+>", " ", ((m.get("body") or {}).get("content") or m.get("bodyPreview") or ""))
                 _bm = re.search(r"希望職稱[\s:：]*([^\s<、,，;；/]+)", _bt)
                 if _bm: job = _bm.group(1).strip()[:50]
-            cand_email = sender.get("address","")
-            if _own_addr(cand_email):
-                cand_email = extract_body_email(((m.get("body") or {}).get("content") or "")) or ""
             cur.execute("""SET NOCOUNT ON;
                            INSERT INTO rec.candidate(CorporationId, Name, JobTitle, Source, AiSummary, Email)
                            VALUES('KTC', ?, ?, '104', ?, ?);
                            SELECT CAST(SCOPE_IDENTITY() AS INT) AS Id;""",
-                        name, job, (m.get("bodyPreview") or "")[:500], cand_email)
+                        name, job, (m.get("bodyPreview") or "")[:500], sender.get("address",""))
             cid = int(cur.fetchone()[0])
             cur.execute("INSERT INTO rec.interview(CandidateId) VALUES(?)", cid)
             cur.execute("UPDATE rec.candidate SET MailPath=? WHERE Id=?", save_mail(cid, m), cid)
@@ -211,61 +184,30 @@ def main():
                             paths.append(fp)
                     elif t.endswith("itemAttachment"):
                         try:
-                            rv = requests.get(f"{G}/users/{MB}/messages/{m['id']}/attachments/{a['id']}/$value",
+                            ri = requests.get(f"{G}/users/{MB}/messages/{m['id']}/attachments/{a['id']}"
+                                              "?$expand=microsoft.graph.itemattachment/item($expand=attachments)",
                                               headers=H, timeout=60)
-                            rv.raise_for_status()
-                            import email as _email
-                            from email import policy as _pol
-                            def _walk_rfc822(msg, depth=0):
-                                # 回傳 (最深層body_html, 附件[(檔名,bytes)])，一路鑽進巢狀 message/rfc822
-                                deepest_body, atts = None, []
-                                inner_msgs = []
-                                for part in msg.walk():
-                                    if part.get_content_type() == "message/rfc822":
-                                        pl = part.get_payload()
-                                        if isinstance(pl, list) and pl:
-                                            inner_msgs.append(pl[0])
-                                        continue
-                                    fnm = part.get_filename() or ""
-                                    if (part.get_content_disposition() or "") == "attachment" \
-                                       and fnm.lower().endswith((".pdf",".doc",".docx")):
-                                        atts.append((fnm, part.get_payload(decode=True) or b""))
-                                if inner_msgs and depth < 5:
-                                    for im in inner_msgs:
-                                        ib, ia = _walk_rfc822(im, depth+1)
-                                        atts.extend(ia)
-                                        if ib:
-                                            deepest_body = ib  # 越深越優先
-                                if deepest_body is None:
-                                    bp = msg.get_body(preferencelist=("html", "plain"))
-                                    if bp is not None:
-                                        bc0 = bp.get_content()
-                                        if bp.get_content_type() == "text/plain":
-                                            bc0 = "<pre>" + bc0 + "</pre>"
-                                        deepest_body = bc0
-                                return deepest_body, atts
-                            emsg = _email.message_from_bytes(rv.content, policy=_pol.default)
-                            bc, _atts = _walk_rfc822(emsg)
-                            for fnm, blob in _atts:
-                                fn = str(cid) + "_" + re.sub(r'[^0-9A-Za-z\u4e00-\u9fff._-]', '_', fnm)
-                                fp = os.path.join(BASE, "resumes", fn)
-                                with open(fp, "wb") as f:
-                                    f.write(blob)
-                                paths.append(fp)
-                            if bc and len(re.sub(r'<[^>]+>','',bc).strip()) > 200:
+                            item = (ri.json() or {}).get("item") or {}
+                            for ia in item.get("attachments", []) or []:
+                                inm = (ia.get("name","") or "")
+                                if ia.get("@odata.type","").endswith("fileAttachment") and not ia.get("isInline") \
+                                   and not re.match(r'(?i)image\d{3}\.', inm) \
+                                   and inm.lower().endswith((".pdf",".doc",".docx")) and ia.get("contentBytes"):
+                                    fn = str(cid) + "_" + re.sub(r'[^0-9A-Za-z\u4e00-\u9fff._-]', '_', inm)
+                                    fp = os.path.join(BASE, "resumes", fn)
+                                    with open(fp, "wb") as f:
+                                        f.write(base64.b64decode(ia["contentBytes"]))
+                                    paths.append(fp)
+                            bc = ((item.get("body") or {}).get("content") or "")
+                            if len(re.sub(r'<[^>]+>','',bc).strip()) > 200:
                                 inner_html = bc
                         except Exception as e:
-                            print("itemAttachment $value 剖析失敗:", repr(e))
+                            print("itemAttachment 展開失敗:", e)
             if inner_html:
                 fp = os.path.join(BASE, "resumes", str(cid) + "_resume.html")
                 with open(fp, "w", encoding="utf-8") as f:
                     f.write(inner_html)
                 paths.append(fp)
-            if not cand_email and inner_html:
-                _be = extract_body_email(inner_html)
-                if _be:
-                    cand_email = _be
-                    cur.execute("UPDATE rec.candidate SET Email=? WHERE Id=?", _be, cid)
             if inner_html and not job:
                 _bt2 = re.sub(r"<[^>]+>", " ", inner_html)
                 _bm2 = re.search(r"希望職稱[\s:：]*([^\s<、,，;；/]+)", _bt2)
@@ -297,9 +239,9 @@ def main():
                     f"<p>{name} 您好：</p><p>感謝您應徵 Kinetics 集團" + (f"「<b>{job}</b>」職務" if job else "") +
                     "，我們已收到您的履歷。<br>相關資料審閱後，將由人事單位主動與您聯繫後續安排。</p>"
                     "<p style='color:#5A6B76'>此為系統自動回覆，請勿直接回信。<br>Kinetics 集團 人事單位</p></div>"},
-                "toRecipients": [{"emailAddress": {"address": cand_email}}]},
+                "toRecipients": [{"emailAddress": {"address": sender.get("address","")}}]},
                 "saveToSentItems": True}
-            if cand_email and not _own_addr(cand_email) and "@kinetics.com.tw" not in sender.get("address","").lower():
+            if sender.get("address") and "104.com" not in sender.get("address","") and "@kinetics.com.tw" not in sender.get("address","").lower():
                 requests.post(f"{G}/users/{MB}/sendMail",
                               json=ack, headers={**H, "Content-Type": "application/json"}, timeout=30)
             rp = requests.patch(f"{G}/users/{MB}/messages/{m['id']}",

@@ -488,12 +488,8 @@ def resume(cid: int, req: Request):
     fp = r.ResumePath.split(";")[0]
     if not os.path.isfile(fp):
         raise HTTPException(404)
-    import mimetypes
-    ext = os.path.splitext(fp)[1].lower()
-    mt = mimetypes.guess_type(fp)[0] or "application/octet-stream"
-    disp = "inline" if ext in (".pdf", ".htm", ".html", ".png", ".jpg", ".jpeg") else "attachment"
-    return FileResponse(fp, media_type=mt,
-                        headers={"Content-Disposition": f"{disp}; filename=resume_{cid}{ext}"})
+    return FileResponse(fp, media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename=resume_{cid}.pdf"})
 
 @app.get("/api/hr/mail/{cid}")
 def mail_view(cid: int, req: Request):

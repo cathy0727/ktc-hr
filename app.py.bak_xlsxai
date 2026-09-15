@@ -10,7 +10,6 @@ env = dict(l.strip().split("=",1) for l in open(os.path.join(BASE,".env")) if "=
 CS = (f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={env['DB_HOST']};DATABASE={env['DB_NAME']};"
       f"UID={env['DB_USER']};PWD={env['DB_PASS']};TrustServerCertificate=yes")
 ALLOW = {a.strip() for a in env.get("HR_ALLOW","").split(",") if a.strip()}
-RW = {a.strip() for a in env.get("HR_RW","").split(",") if a.strip()}
 
 app = FastAPI(docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=env["SECRET"], max_age=8*3600)
@@ -34,12 +33,6 @@ def ad_login(user, pwd):
 def me(req: Request):
     u = req.session.get("user")
     if not u: raise HTTPException(401)
-    return u
-
-def me_rw(req: Request):
-    u = me(req)
-    if RW and u not in RW:
-        raise HTTPException(403, "唯讀帳號，僅供瀏覽")
     return u
 
 @app.get("/")
@@ -68,9 +61,7 @@ def logout(req: Request):
     req.session.clear(); return RedirectResponse("/")
 
 @app.get("/api/hr/me")
-def whoami(req: Request):
-    u = me(req)
-    return {"user": u, "rw": (not RW) or (u in RW)}
+def whoami(req: Request): return {"user": me(req)}
 
 @app.get("/api/hr/candidates")
 def candidates(req: Request):
@@ -106,7 +97,7 @@ def candidates(req: Request):
 
 @app.post("/api/hr/candidate")
 async def add_candidate(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     name, job, corp = b.get("name","").strip(), b.get("job","").strip(), b.get("corp","KTC")
     n_mail = (b.get("email") or "").strip() or None
     if not name or not job: raise HTTPException(400)
@@ -121,7 +112,7 @@ async def add_candidate(req: Request):
 
 @app.post("/api/hr/token")
 async def gen_token(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid, kind = int(b.get("id",0)), b.get("kind","")
     if kind not in ("apply","exam") or not cid: raise HTTPException(400)
     t = secrets.token_urlsafe(18)
@@ -165,17 +156,6 @@ def _parse_exam_xlsx(tmp):
 
 # ── 題庫解析：Word/PDF 抽文字（掃描版 PDF 自動轉圖走 Vision）──
 def _exam_extract(tmp, ext):
-    if ext == "xlsx":
-        import openpyxl
-        wb = openpyxl.load_workbook(tmp, data_only=True)
-        parts = []
-        for name in wb.sheetnames:
-            parts.append("【工作表：" + name + "】")
-            for row in wb[name].iter_rows(values_only=True):
-                cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
-                if cells: parts.append(" | ".join(cells))
-        if len(parts) <= len(wb.sheetnames): raise ExamParseError("Excel 讀不到內容")
-        return "\n".join(parts), None
     if ext == "docx":
         import docx
         d = docx.Document(tmp)
@@ -210,7 +190,7 @@ _EXAM_AI_PROMPT = """你是題庫整理員。從提供的考卷內容抽出所�
 - 非選擇題（問答、實作、填空）一律跳過
 - 找不到任何選擇題時輸出 {"questions":[]}"""
 
-def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint, fname=""):
+def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint):
     try:
         key = env.get("ANTHROPIC_API_KEY") if hasattr(env, "get") else env["ANTHROPIC_API_KEY"]
     except Exception:
@@ -225,7 +205,7 @@ def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint, fname=""):
         content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b}} for b in imgs]
         content.append({"type": "text", "text": prompt + "\n（考卷為掃描影像，內容在附圖中）"})
     else:
-        content = prompt + "\n\n檔名：" + (fname or "") + "\n=== 考卷內容 ===\n" + text[:60000]
+        content = prompt + "\n\n=== 考卷內容 ===\n" + text[:60000]
     r = client.messages.create(model="claude-sonnet-5", max_tokens=8000,
                                messages=[{"role": "user", "content": content}])
     out = "".join(b.text for b in r.content if b.type == "text")
@@ -253,7 +233,7 @@ def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint, fname=""):
 
 @app.post("/api/hr/exam/upload")
 async def exam_upload(req: Request, file: UploadFile = File(...)):
-    u = me_rw(req)
+    u = me(req)
     fname = (file.filename or "").lower()
     ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
     if ext not in ("xlsx", "docx", "pdf"):
@@ -262,16 +242,13 @@ async def exam_upload(req: Request, file: UploadFile = File(...)):
     with open(tmp, "wb") as f: f.write(await file.read())
     qp = req.query_params
     try:
-        _hints = ((qp.get("jf") or "").strip() or None,
-                  (qp.get("title") or "").strip() or None,
-                  (qp.get("tmin") or "").strip() or None)
         if ext == "xlsx":
-            try:
-                groups, skipped = _parse_exam_xlsx(tmp)
-            except ExamParseError:
-                groups, skipped = _parse_exam_ai(tmp, ext, *_hints, fname=(file.filename or ""))
+            groups, skipped = _parse_exam_xlsx(tmp)
         else:
-            groups, skipped = _parse_exam_ai(tmp, ext, *_hints, fname=(file.filename or ""))
+            groups, skipped = _parse_exam_ai(tmp, ext,
+                                             (qp.get("jf") or "").strip() or None,
+                                             (qp.get("title") or "").strip() or None,
+                                             (qp.get("tmin") or "").strip() or None)
     except ExamParseError as e:
         os.remove(tmp); return JSONResponse({"ok": False, "msg": str(e)}, status_code=400)
     except Exception:
@@ -302,7 +279,7 @@ async def exam_upload(req: Request, file: UploadFile = File(...)):
 
 @app.post("/api/hr/exam/clear")
 def exam_clear(req: Request):
-    u = me_rw(req)
+    u = me(req)
     cn = db(); cur = cn.cursor()
     cur.execute("DELETE FROM rec.exam_question"); n_q = cur.rowcount
     cur.execute("DELETE FROM rec.exam_set"); n_s = cur.rowcount
@@ -318,7 +295,7 @@ def exam_clear(req: Request):
 
 @app.post("/api/hr/exam/delete")
 def exam_delete(req: Request, jf: str = ""):
-    u = me_rw(req)
+    u = me(req)
     jf = (jf or "").strip()
     if not jf: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
@@ -330,20 +307,6 @@ def exam_delete(req: Request, jf: str = ""):
     cur.execute("DELETE FROM rec.exam_set WHERE Id=?", r.Id)
     cn.commit(); cn.close()
     return {"ok": True, "msg": f"已刪除「{jf}」卷（{n_q} 題）"}
-
-@app.get("/api/hr/exam/questions")
-def exam_questions_admin(req: Request, jf: str = ""):
-    u = me(req)
-    cn = db(); cur = cn.cursor()
-    cur.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", (jf or "").strip())
-    r = cur.fetchone()
-    if not r:
-        cn.close(); raise HTTPException(404)
-    cur.execute("SELECT Seq, Prompt, OptionsJson, Answer, Points FROM rec.exam_question WHERE SetId=? ORDER BY Seq", r.Id)
-    qs = [{"seq": x.Seq, "prompt": x.Prompt, "options": json.loads(x.OptionsJson),
-           "answer": x.Answer, "points": x.Points} for x in cur.fetchall()]
-    cn.close()
-    return {"questions": qs}
 
 # ══ 面試邀約：Teams 會議＋邀請信＋CC 用人單位 ══
 import msal as _msal, requests as _rq
@@ -361,7 +324,7 @@ def graph_token():
 
 @app.post("/api/hr/invite")
 async def invite(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     rnd = int(b.get("round", 1) or 1)
     cand_mail = (b.get("email") or "").strip()
@@ -488,12 +451,8 @@ def resume(cid: int, req: Request):
     fp = r.ResumePath.split(";")[0]
     if not os.path.isfile(fp):
         raise HTTPException(404)
-    import mimetypes
-    ext = os.path.splitext(fp)[1].lower()
-    mt = mimetypes.guess_type(fp)[0] or "application/octet-stream"
-    disp = "inline" if ext in (".pdf", ".htm", ".html", ".png", ".jpg", ".jpeg") else "attachment"
-    return FileResponse(fp, media_type=mt,
-                        headers={"Content-Disposition": f"{disp}; filename=resume_{cid}{ext}"})
+    return FileResponse(fp, media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename=resume_{cid}.pdf"})
 
 @app.get("/api/hr/mail/{cid}")
 def mail_view(cid: int, req: Request):
@@ -540,7 +499,7 @@ def hire_defaults(id: int, req: Request):
 
 @app.post("/api/hr/hire")
 async def hire(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt, base64 as _b64
     cid = int(b.get("id", 0))
     date, time_ = (b.get("date") or "").strip(), (b.get("time") or "").strip()
@@ -687,7 +646,7 @@ def _send_mail(to, subject, body_html, attachments, cc=None):
 
 @app.post("/api/hr/hire/prepare")
 async def hire_prepare(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt
     cid = int(b.get("id", 0))
     date, time_ = (b.get("date") or "").strip(), (b.get("time") or "").strip()
@@ -879,7 +838,7 @@ async def approve_do(req: Request):
 
 @app.post("/api/hr/reject")
 async def reject(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     if not cid: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
@@ -921,7 +880,7 @@ def db_pay():
 
 @app.post("/api/hr/intent")
 async def intent(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     honor = (b.get("honorific") or "先生").strip()
     cand_mail = (b.get("email") or "").strip()
@@ -950,7 +909,7 @@ async def intent(req: Request):
 
 @app.post("/api/hr/salary/start")
 async def salary_start(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     rv_user = (b.get("reviewer_user") or "").strip().lower()
     rv_mail = (b.get("reviewer_mail") or "").strip()
@@ -1221,7 +1180,7 @@ async def salary_pdf(req: Request):
 @app.post("/api/hr/salary/offline")
 async def salary_offline(req: Request):
     """線下核薪：主管以 email 回覆核定、人事轉寄存查後，僅推進狀態，不寫任何薪資數字"""
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     note = (b.get("note") or "").strip()
     if not cid: raise HTTPException(400)
@@ -1245,7 +1204,7 @@ def _latest_event(cur, cid, etype):
 
 @app.post("/api/hr/reschedule")
 async def reschedule(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt
     cid = int(b.get("id", 0))
     nd, nt, ns = (b.get("date") or "").strip(), (b.get("time") or "").strip(), b.get("site", "")
@@ -1327,7 +1286,7 @@ def guide_page():
 @app.post("/api/hr/confirm2")
 async def confirm2(req: Request):
     """人事收到複試回覆後手動確認出席"""
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     if not cid: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
@@ -1392,7 +1351,7 @@ def paydrop_template(kind: str, req: Request):
 
 @app.post("/api/hr/paydrop/upload")
 async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC", file: UploadFile = File(...)):
-    u = me_rw(req)
+    u = me(req)
     kindname = PAYDROP_KINDS.get(kind)
     if kindname is None:
         kind = os.path.basename((kind or "").strip())
@@ -1427,7 +1386,7 @@ async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC"
 
 @app.post("/api/hr/paydrop/commit")
 async def paydrop_commit(req: Request):
-    me_rw(req)
+    me(req)
     try: await req.json()
     except Exception: pass
     return {"ok": True, "rows": 0}

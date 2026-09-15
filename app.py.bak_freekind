@@ -10,7 +10,6 @@ env = dict(l.strip().split("=",1) for l in open(os.path.join(BASE,".env")) if "=
 CS = (f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={env['DB_HOST']};DATABASE={env['DB_NAME']};"
       f"UID={env['DB_USER']};PWD={env['DB_PASS']};TrustServerCertificate=yes")
 ALLOW = {a.strip() for a in env.get("HR_ALLOW","").split(",") if a.strip()}
-RW = {a.strip() for a in env.get("HR_RW","").split(",") if a.strip()}
 
 app = FastAPI(docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=env["SECRET"], max_age=8*3600)
@@ -34,12 +33,6 @@ def ad_login(user, pwd):
 def me(req: Request):
     u = req.session.get("user")
     if not u: raise HTTPException(401)
-    return u
-
-def me_rw(req: Request):
-    u = me(req)
-    if RW and u not in RW:
-        raise HTTPException(403, "唯讀帳號，僅供瀏覽")
     return u
 
 @app.get("/")
@@ -68,9 +61,7 @@ def logout(req: Request):
     req.session.clear(); return RedirectResponse("/")
 
 @app.get("/api/hr/me")
-def whoami(req: Request):
-    u = me(req)
-    return {"user": u, "rw": (not RW) or (u in RW)}
+def whoami(req: Request): return {"user": me(req)}
 
 @app.get("/api/hr/candidates")
 def candidates(req: Request):
@@ -106,7 +97,7 @@ def candidates(req: Request):
 
 @app.post("/api/hr/candidate")
 async def add_candidate(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     name, job, corp = b.get("name","").strip(), b.get("job","").strip(), b.get("corp","KTC")
     n_mail = (b.get("email") or "").strip() or None
     if not name or not job: raise HTTPException(400)
@@ -121,7 +112,7 @@ async def add_candidate(req: Request):
 
 @app.post("/api/hr/token")
 async def gen_token(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid, kind = int(b.get("id",0)), b.get("kind","")
     if kind not in ("apply","exam") or not cid: raise HTTPException(400)
     t = secrets.token_urlsafe(18)
@@ -142,15 +133,17 @@ def exam_sets(req: Request):
     rows = [{"jf": r.JobFunction, "title": r.Title, "tmin": r.TimeLimitMin, "cnt": r.Cnt} for r in cur.fetchall()]
     cn.close(); return {"sets": rows}
 
-# ── 題庫解析：Excel 範本（原邏輯抽成函式）──
-class ExamParseError(Exception): pass
-
-def _parse_exam_xlsx(tmp):
+@app.post("/api/hr/exam/upload")
+async def exam_upload(req: Request, file: UploadFile = File(...)):
+    u = me(req)
     import openpyxl
+    tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + ".xlsx")
+    with open(tmp, "wb") as f: f.write(await file.read())
     try:
         ws = openpyxl.load_workbook(tmp, data_only=True)["題庫"]
     except Exception:
-        raise ExamParseError("讀不到「題庫」工作表")
+        os.remove(tmp); return JSONResponse({"ok": False, "msg": "讀不到「題庫」工作表"}, status_code=400)
+    cn = db(); cur = cn.cursor()
     groups, skipped = {}, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or not row[0]: continue
@@ -161,126 +154,6 @@ def _parse_exam_xlsx(tmp):
         g = groups.setdefault(str(jf).strip(), {"title": str(title or jf).strip(), "tmin": int(tmin or 60), "qs": []})
         g["qs"].append((int(seq or len(g["qs"])+1), str(prompt).strip(),
                         json.dumps(opts, ensure_ascii=False), str(ans).strip().upper(), float(pts or 5)))
-    return groups, skipped
-
-# ── 題庫解析：Word/PDF 抽文字（掃描版 PDF 自動轉圖走 Vision）──
-def _exam_extract(tmp, ext):
-    if ext == "xlsx":
-        import openpyxl
-        wb = openpyxl.load_workbook(tmp, data_only=True)
-        parts = []
-        for name in wb.sheetnames:
-            parts.append("【工作表：" + name + "】")
-            for row in wb[name].iter_rows(values_only=True):
-                cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
-                if cells: parts.append(" | ".join(cells))
-        if len(parts) <= len(wb.sheetnames): raise ExamParseError("Excel 讀不到內容")
-        return "\n".join(parts), None
-    if ext == "docx":
-        import docx
-        d = docx.Document(tmp)
-        parts = [p.text.strip() for p in d.paragraphs if p.text and p.text.strip()]
-        for t in d.tables:
-            for row in t.rows:
-                parts.append(" | ".join(c.text.strip() for c in row.cells))
-        if not parts: raise ExamParseError("Word 檔讀不到文字內容")
-        return "\n".join(parts), None
-    import fitz
-    doc = fitz.open(tmp)
-    txt = "\n".join(pg.get_text() for pg in doc)
-    if len(txt.strip()) >= 100:
-        doc.close(); return txt, None
-    import base64
-    imgs = []
-    for pg in list(doc)[:10]:
-        pix = pg.get_pixmap(dpi=150)
-        imgs.append(base64.b64encode(pix.tobytes("png")).decode())
-    doc.close()
-    if not imgs: raise ExamParseError("PDF 無法讀取內容")
-    return None, imgs
-
-_EXAM_AI_PROMPT = """你是題庫整理員。從提供的考卷內容抽出所有「選擇題」，輸出唯一一個 JSON 物件、不加任何說明或 Markdown 圍欄：
-{"jf":"職能關鍵字","title":"卷名","tmin":60,"questions":[{"seq":1,"prompt":"題目全文","options":["選項A內容","選項B內容","選項C內容","選項D內容"],"answer":"A","points":5}]}
-規則：
-- jf：%s
-- title：卷內若有標題用標題，否則用「jf＋筆試」；tmin：卷內有作答時間就用，沒有填 60
-- options 為 2~4 個，內容不含「A.」「(B)」等編號前綴；answer 只能是 A/B/C/D，對應 options 順序
-- 卷內有標答案就照標的；完全沒有答案標示時，由你判斷正解填入
-- points：卷內有配分就用，沒有填 5；seq 依卷內題號，沒有題號照出現順序
-- 非選擇題（問答、實作、填空）一律跳過
-- 找不到任何選擇題時輸出 {"questions":[]}"""
-
-def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint, fname=""):
-    try:
-        key = env.get("ANTHROPIC_API_KEY") if hasattr(env, "get") else env["ANTHROPIC_API_KEY"]
-    except Exception:
-        key = None
-    if not key: raise ExamParseError("尚未設定 ANTHROPIC_API_KEY（.env）")
-    text, imgs = _exam_extract(tmp, ext)
-    jf_rule = ("一律用「" + jf_hint + "」") if jf_hint else "從卷名/內容判斷最合適的 2~4 字職能關鍵字"
-    prompt = _EXAM_AI_PROMPT % jf_rule
-    import anthropic
-    client = anthropic.Anthropic(api_key=key)
-    if imgs:
-        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b}} for b in imgs]
-        content.append({"type": "text", "text": prompt + "\n（考卷為掃描影像，內容在附圖中）"})
-    else:
-        content = prompt + "\n\n檔名：" + (fname or "") + "\n=== 考卷內容 ===\n" + text[:60000]
-    r = client.messages.create(model="claude-sonnet-5", max_tokens=8000,
-                               messages=[{"role": "user", "content": content}])
-    out = "".join(b.text for b in r.content if b.type == "text")
-    out = out.replace("```json", "").replace("```", "").strip()
-    try:
-        data = json.loads(out)
-    except Exception:
-        raise ExamParseError("AI 回傳非 JSON，請再試一次或改用 Excel 範本")
-    qs, skipped = [], 0
-    for i, q in enumerate(data.get("questions") or []):
-        opts = [str(x).strip() for x in (q.get("options") or []) if str(x).strip()]
-        ans = str(q.get("answer") or "").strip().upper()
-        if not q.get("prompt") or len(opts) < 2 or ans not in list("ABCD"[:len(opts)]):
-            skipped += 1; continue
-        qs.append((int(q.get("seq") or i+1), str(q["prompt"]).strip(),
-                   json.dumps(opts, ensure_ascii=False), ans, float(q.get("points") or 5)))
-    if not qs:
-        raise ExamParseError("AI 沒抽到可用的選擇題" + (("（略過 " + str(skipped) + " 題）") if skipped else ""))
-    jf = (jf_hint or str(data.get("jf") or "").strip())
-    if not jf: raise ExamParseError("判斷不出職能關鍵字，請在上傳時填職能")
-    title = (title_hint or str(data.get("title") or "").strip() or jf + "筆試")
-    try: tmin = int(tmin_hint or data.get("tmin") or 60)
-    except Exception: tmin = 60
-    return {jf: {"title": title, "tmin": tmin, "qs": qs}}, skipped
-
-@app.post("/api/hr/exam/upload")
-async def exam_upload(req: Request, file: UploadFile = File(...)):
-    u = me_rw(req)
-    fname = (file.filename or "").lower()
-    ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
-    if ext not in ("xlsx", "docx", "pdf"):
-        return JSONResponse({"ok": False, "msg": "只收 .xlsx / .docx / .pdf"}, status_code=400)
-    tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + "." + ext)
-    with open(tmp, "wb") as f: f.write(await file.read())
-    qp = req.query_params
-    try:
-        _hints = ((qp.get("jf") or "").strip() or None,
-                  (qp.get("title") or "").strip() or None,
-                  (qp.get("tmin") or "").strip() or None)
-        if ext == "xlsx":
-            try:
-                groups, skipped = _parse_exam_xlsx(tmp)
-            except ExamParseError:
-                groups, skipped = _parse_exam_ai(tmp, ext, *_hints, fname=(file.filename or ""))
-        else:
-            groups, skipped = _parse_exam_ai(tmp, ext, *_hints, fname=(file.filename or ""))
-    except ExamParseError as e:
-        os.remove(tmp); return JSONResponse({"ok": False, "msg": str(e)}, status_code=400)
-    except Exception:
-        os.remove(tmp)
-        return JSONResponse({"ok": False, "msg": "解析失敗（AI 服務或檔案異常），請重試"}, status_code=500)
-    os.remove(tmp)
-    if not groups:
-        return JSONResponse({"ok": False, "msg": "沒解析到任何題目"}, status_code=400)
-    cn = db(); cur = cn.cursor()
     lines = []
     for jf, g in groups.items():
         cur.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", jf)
@@ -297,53 +170,8 @@ async def exam_upload(req: Request, file: UploadFile = File(...)):
         for q in sorted(g["qs"]):
             cur.execute("INSERT INTO rec.exam_question(SetId,Seq,Prompt,OptionsJson,Answer,Points) VALUES(?,?,?,?,?,?)", sid, *q)
         lines.append(f"{jf}：{len(g['qs'])} 題（{'覆蓋' if r else '新卷'}）")
-    cn.commit(); cn.close()
+    cn.commit(); cn.close(); os.remove(tmp)
     return {"ok": True, "msg": "、".join(lines) + (f"｜略過 {skipped} 列" if skipped else "")}
-
-@app.post("/api/hr/exam/clear")
-def exam_clear(req: Request):
-    u = me_rw(req)
-    cn = db(); cur = cn.cursor()
-    cur.execute("DELETE FROM rec.exam_question"); n_q = cur.rowcount
-    cur.execute("DELETE FROM rec.exam_set"); n_s = cur.rowcount
-    cn.commit(); cn.close()
-    cn2 = db(); cur2 = cn2.cursor()
-    try:
-        cur2.execute("INSERT INTO rec.event(EventType, Payload) VALUES('exam_cleared', ?)", f"{n_s} sets/{n_q} questions by {u}")
-        cn2.commit()
-    except Exception:
-        pass
-    cn2.close()
-    return {"ok": True, "msg": f"已清空：{n_s} 卷、{n_q} 題"}
-
-@app.post("/api/hr/exam/delete")
-def exam_delete(req: Request, jf: str = ""):
-    u = me_rw(req)
-    jf = (jf or "").strip()
-    if not jf: raise HTTPException(400)
-    cn = db(); cur = cn.cursor()
-    cur.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", jf)
-    r = cur.fetchone()
-    if not r:
-        cn.close(); return JSONResponse({"ok": False, "msg": "找不到該卷"}, status_code=404)
-    cur.execute("DELETE FROM rec.exam_question WHERE SetId=?", r.Id); n_q = cur.rowcount
-    cur.execute("DELETE FROM rec.exam_set WHERE Id=?", r.Id)
-    cn.commit(); cn.close()
-    return {"ok": True, "msg": f"已刪除「{jf}」卷（{n_q} 題）"}
-
-@app.get("/api/hr/exam/questions")
-def exam_questions_admin(req: Request, jf: str = ""):
-    u = me(req)
-    cn = db(); cur = cn.cursor()
-    cur.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", (jf or "").strip())
-    r = cur.fetchone()
-    if not r:
-        cn.close(); raise HTTPException(404)
-    cur.execute("SELECT Seq, Prompt, OptionsJson, Answer, Points FROM rec.exam_question WHERE SetId=? ORDER BY Seq", r.Id)
-    qs = [{"seq": x.Seq, "prompt": x.Prompt, "options": json.loads(x.OptionsJson),
-           "answer": x.Answer, "points": x.Points} for x in cur.fetchall()]
-    cn.close()
-    return {"questions": qs}
 
 # ══ 面試邀約：Teams 會議＋邀請信＋CC 用人單位 ══
 import msal as _msal, requests as _rq
@@ -361,7 +189,7 @@ def graph_token():
 
 @app.post("/api/hr/invite")
 async def invite(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     rnd = int(b.get("round", 1) or 1)
     cand_mail = (b.get("email") or "").strip()
@@ -488,12 +316,8 @@ def resume(cid: int, req: Request):
     fp = r.ResumePath.split(";")[0]
     if not os.path.isfile(fp):
         raise HTTPException(404)
-    import mimetypes
-    ext = os.path.splitext(fp)[1].lower()
-    mt = mimetypes.guess_type(fp)[0] or "application/octet-stream"
-    disp = "inline" if ext in (".pdf", ".htm", ".html", ".png", ".jpg", ".jpeg") else "attachment"
-    return FileResponse(fp, media_type=mt,
-                        headers={"Content-Disposition": f"{disp}; filename=resume_{cid}{ext}"})
+    return FileResponse(fp, media_type="application/pdf",
+                        headers={"Content-Disposition": f"inline; filename=resume_{cid}.pdf"})
 
 @app.get("/api/hr/mail/{cid}")
 def mail_view(cid: int, req: Request):
@@ -540,7 +364,7 @@ def hire_defaults(id: int, req: Request):
 
 @app.post("/api/hr/hire")
 async def hire(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt, base64 as _b64
     cid = int(b.get("id", 0))
     date, time_ = (b.get("date") or "").strip(), (b.get("time") or "").strip()
@@ -687,7 +511,7 @@ def _send_mail(to, subject, body_html, attachments, cc=None):
 
 @app.post("/api/hr/hire/prepare")
 async def hire_prepare(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt
     cid = int(b.get("id", 0))
     date, time_ = (b.get("date") or "").strip(), (b.get("time") or "").strip()
@@ -879,7 +703,7 @@ async def approve_do(req: Request):
 
 @app.post("/api/hr/reject")
 async def reject(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     if not cid: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
@@ -921,7 +745,7 @@ def db_pay():
 
 @app.post("/api/hr/intent")
 async def intent(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     honor = (b.get("honorific") or "先生").strip()
     cand_mail = (b.get("email") or "").strip()
@@ -950,7 +774,7 @@ async def intent(req: Request):
 
 @app.post("/api/hr/salary/start")
 async def salary_start(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     rv_user = (b.get("reviewer_user") or "").strip().lower()
     rv_mail = (b.get("reviewer_mail") or "").strip()
@@ -1221,7 +1045,7 @@ async def salary_pdf(req: Request):
 @app.post("/api/hr/salary/offline")
 async def salary_offline(req: Request):
     """線下核薪：主管以 email 回覆核定、人事轉寄存查後，僅推進狀態，不寫任何薪資數字"""
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     note = (b.get("note") or "").strip()
     if not cid: raise HTTPException(400)
@@ -1245,7 +1069,7 @@ def _latest_event(cur, cid, etype):
 
 @app.post("/api/hr/reschedule")
 async def reschedule(req: Request):
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     import datetime as _dt
     cid = int(b.get("id", 0))
     nd, nt, ns = (b.get("date") or "").strip(), (b.get("time") or "").strip(), b.get("site", "")
@@ -1327,7 +1151,7 @@ def guide_page():
 @app.post("/api/hr/confirm2")
 async def confirm2(req: Request):
     """人事收到複試回覆後手動確認出席"""
-    u = me_rw(req); b = await req.json()
+    u = me(req); b = await req.json()
     cid = int(b.get("id", 0))
     if not cid: raise HTTPException(400)
     cn = db(); cur = cn.cursor()
@@ -1392,12 +1216,8 @@ def paydrop_template(kind: str, req: Request):
 
 @app.post("/api/hr/paydrop/upload")
 async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC", file: UploadFile = File(...)):
-    u = me_rw(req)
-    kindname = PAYDROP_KINDS.get(kind)
-    if kindname is None:
-        kind = os.path.basename((kind or "").strip())
-        if not kind or len(kind) > 40 or kind.startswith("."): raise HTTPException(400, "項目名稱不合法")
-        kindname = kind
+    u = me(req)
+    if kind not in PAYDROP_KINDS: raise HTTPException(400, "kind 不合法")
     import re as _re, datetime as _dt, io as _io
     if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400, "期別格式應為 YYYY-MM")
     fname = os.path.basename(file.filename or "upload.bin")
@@ -1417,7 +1237,7 @@ async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC"
         pass
     cn = db(); cur = cn.cursor()
     cur.execute("INSERT INTO rec.event(EventType, Payload) VALUES('paydrop_deliver', ?)",
-                json.dumps({"kind": kindname, "period": period, "corp": corp,
+                json.dumps({"kind": PAYDROP_KINDS[kind], "period": period, "corp": corp,
                             "file": fname[:190], "saved": os.path.basename(dest),
                             "rows": valid, "by": u}, ensure_ascii=False))
     cn.commit(); cn.close()
@@ -1427,7 +1247,7 @@ async def paydrop_upload(req: Request, kind: str, period: str, corp: str = "KTC"
 
 @app.post("/api/hr/paydrop/commit")
 async def paydrop_commit(req: Request):
-    me_rw(req)
+    me(req)
     try: await req.json()
     except Exception: pass
     return {"ok": True, "rows": 0}
@@ -1448,33 +1268,13 @@ def paydrop_status(period: str, req: Request, corp: str = "KTC"):
         out[name] = {"rows": len(fs), "at": t.strftime("%Y-%m-%d %H:%M"),
                      "by": parts[2] if len(parts) >= 4 else "",
                      "file": parts[3] if len(parts) >= 4 else latest, "saved": latest, "path": f"paydrop/{period}/{corp}/{k}/"}
-    pbase = os.path.join(BASE, "paydrop", period, corp)
-    try:
-        for k in sorted(os.listdir(pbase)):
-            d = os.path.join(pbase, k)
-            if k in PAYDROP_KINDS or k.startswith(".") or not os.path.isdir(d): continue
-            fs = sorted(f for f in os.listdir(d) if not f.startswith("."))
-            if not fs: continue
-            latest = fs[-1]
-            t = _dt.datetime.fromtimestamp(os.path.getmtime(os.path.join(d, latest)))
-            parts = latest.split("_", 3)
-            out[k] = {"rows": len(fs), "at": t.strftime("%Y-%m-%d %H:%M"),
-                      "by": parts[2] if len(parts) >= 4 else "",
-                      "file": parts[3] if len(parts) >= 4 else latest,
-                      "saved": latest, "path": f"paydrop/{period}/{corp}/{k}/", "custom": k}
-    except FileNotFoundError:
-        pass
-    fixed = {v: out.get(v) for v in PAYDROP_KINDS.values()}
-    extra = {k: v for k, v in out.items() if k not in fixed}
-    return {"ok": True, "kinds": {**fixed, **extra}}
+    return {"ok": True, "kinds": {v: out.get(v) for v in PAYDROP_KINDS.values()}}
 
 @app.get("/api/hr/paydrop/file")
 def paydrop_file(kind: str, period: str, saved: str, req: Request, corp: str = "KTC"):
     me(req)
     import re as _re
-    if kind not in PAYDROP_KINDS:
-        kind = os.path.basename((kind or "").strip())
-        if not kind or kind.startswith("."): raise HTTPException(400)
+    if kind not in PAYDROP_KINDS: raise HTTPException(400)
     if not _re.match(r"^\d{4}-\d{2}$", period or ""): raise HTTPException(400)
     fname = os.path.basename(saved)          # 防路徑跳脫
     fp = os.path.join(BASE, "paydrop", period, corp, kind, fname)

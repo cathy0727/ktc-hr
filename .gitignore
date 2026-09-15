@@ -3,3 +3,8 @@ logs/
 .env
 attach_onboard/
 venv/
+resumes/
+paydrop/
+hire_docs/
+__pycache__/
+up_*.xlsx

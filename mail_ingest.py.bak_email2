@@ -50,25 +50,20 @@ def _own_addr(addr):
     a = (addr or "").lower()
     return (not a) or ("104.com" in a) or ("@kinetics.com.tw" in a)
 
-def _valid_email(a):
-    """格式合法且長度安全的信箱才放行"""
-    return bool(a) and len(a) <= 120 and EMAIL_RE.fullmatch(a) is not None
-
 def extract_body_email(text):
-    """從信件/履歷 HTML 內文抽應徵者信箱：E-mail 標籤鄰近優先、mailto 備援；一律格式驗證"""
+    """從信件/履歷 HTML 內文抽應徵者信箱：mailto 優先、E-mail 標籤鄰近次之"""
     if not text:
         return None
     from html import unescape
     text = unescape(text)
+    for mm in re.finditer(r"mailto:([^\"'?&<> ]+)", text):
+        if not _own_addr(mm.group(1)):
+            return mm.group(1)
     for mm in re.finditer(r"E-?mail", text, re.I):
         seg = re.sub(r"<[^>]+>", " ", text[mm.end():mm.end()+300])
         em = EMAIL_RE.search(seg)
-        if em and _valid_email(em.group(0)) and not _own_addr(em.group(0)):
+        if em and not _own_addr(em.group(0)):
             return em.group(0)
-    for mm in re.finditer(r"mailto:([^\"'?&<> ]+)", text):
-        a = mm.group(1).strip().rstrip(".,;")
-        if _valid_email(a) and not _own_addr(a):
-            return a
     return None
 
 REPLY_PAT = re.compile(r"^(Re:|RE:|回覆[:：]|Fw:|FW:|轉寄[:：])|面試邀請")
@@ -192,7 +187,6 @@ def main():
             cand_email = sender.get("address","")
             if _own_addr(cand_email):
                 cand_email = extract_body_email(((m.get("body") or {}).get("content") or "")) or ""
-            cand_email = (cand_email or "")[:120]
             cur.execute("""SET NOCOUNT ON;
                            INSERT INTO rec.candidate(CorporationId, Name, JobTitle, Source, AiSummary, Email)
                            VALUES('KTC', ?, ?, '104', ?, ?);
@@ -305,7 +299,7 @@ def main():
                     "<p style='color:#5A6B76'>此為系統自動回覆，請勿直接回信。<br>Kinetics 集團 人事單位</p></div>"},
                 "toRecipients": [{"emailAddress": {"address": cand_email}}]},
                 "saveToSentItems": True}
-            if _valid_email(cand_email) and not _own_addr(cand_email) and "@kinetics.com.tw" not in sender.get("address","").lower():
+            if cand_email and not _own_addr(cand_email) and "@kinetics.com.tw" not in sender.get("address","").lower():
                 requests.post(f"{G}/users/{MB}/sendMail",
                               json=ack, headers={**H, "Content-Type": "application/json"}, timeout=30)
             rp = requests.patch(f"{G}/users/{MB}/messages/{m['id']}",
@@ -313,15 +307,7 @@ def main():
             rp.raise_for_status()
             done += 1
         except Exception as e:
-            print("單封失敗:", type(e).__name__)
-            try:
-                os.makedirs(os.path.join(BASE, "logs"), exist_ok=True)
-                import datetime as _dt
-                with open(os.path.join(BASE, "logs", "ingest_errors.log"), "a", encoding="utf-8") as _lf:
-                    _lf.write(f"{_dt.datetime.now():%Y-%m-%d %H:%M} {type(e).__name__} | {(m.get('subject') or '')[:80]}\n")
-            except Exception:
-                pass
-            cn.rollback(); continue
+            print("單封失敗:", type(e).__name__); cn.rollback(); continue
         cn.commit()
     cn.close()
     print(f"處理 {done}/{len(msgs)} 封")

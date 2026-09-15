@@ -12,17 +12,6 @@ CS = (f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={env['DB_HOST']};DATABAS
 ALLOW = {a.strip() for a in env.get("HR_ALLOW","").split(",") if a.strip()}
 RW = {a.strip() for a in env.get("HR_RW","").split(",") if a.strip()}
 
-import re as _re_mail
-_EMAIL_OK = _re_mail.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-def _guard_mail(addr):
-    """對外收件信箱守門：格式合法、長度安全、且非 104 系統信箱才放行；否則回 None"""
-    a = (addr or "").strip()
-    if not a or len(a) > 120 or _EMAIL_OK.fullmatch(a) is None:
-        return None
-    if "104.com" in a.lower():
-        return None
-    return a
-
 app = FastAPI(docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=env["SECRET"], max_age=8*3600)
 
@@ -382,8 +371,6 @@ async def invite(req: Request):
     location = (b.get("location") or "本公司會議室").strip()
     if not (cid and cand_mail and date and time_):
         raise HTTPException(400)
-    if _guard_mail(cand_mail) is None:
-        return JSONResponse({"ok": False, "msg": "Email 空白、格式不正確或為 104 系統信箱，請修正後再寄"}, status_code=400)
     cn = db(); cur = cn.cursor()
     cur.execute("SELECT Name, JobTitle FROM rec.candidate WHERE Id=?", cid)
     c = cur.fetchone()
@@ -454,7 +441,7 @@ async def invite(req: Request):
         cn.rollback(); cn.close()
         return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
     _stage = "複試邀約中" if rnd >= 2 else "已邀約"
-    cur.execute("UPDATE rec.candidate SET Email=?, Stage=?, LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, _stage, cid)
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=?, LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, _stage, cid)
     if rnd >= 2:
         cur.execute("INSERT INTO rec.interview(CandidateId) VALUES(?)", cid)
     cur.execute("UPDATE rec.interview SET InterviewerMail=?, ScheduledAt=?, TeamsUrl=? WHERE CandidateId=?",
@@ -569,9 +556,9 @@ async def hire(req: Request):
     cur.execute("SELECT Name, Email FROM rec.candidate WHERE Id=?", cid)
     c = cur.fetchone()
     if not c: cn.close(); raise HTTPException(404)
-    cand_mail = _guard_mail(cand_mail or (c.Email or "").strip()) or ""
+    cand_mail = cand_mail or (c.Email or "").strip()
     if not cand_mail:
-        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有有效 Email（空白／格式錯誤／104 系統信箱），請先修正"}, status_code=400)
+        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有 Email，請先補上"}, status_code=400)
     rd = _dt.date.fromisoformat(date)
     wd = "一二三四五六日"[rd.weekday()]
     hh = int(time_.split(":")[0]); ampm = "上午" if hh < 12 else "下午"
@@ -646,7 +633,7 @@ async def hire(req: Request):
         return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
     payload = json.dumps({"date": date, "time": time_, "site": site, "job": job, "dept": dept,
                           "nature": nature, "token": ot, "by": u}, ensure_ascii=False)
-    cur.execute("UPDATE rec.candidate SET Email=?, Stage=N'錄取', LastContactAt=SYSDATETIME() WHERE Id=?", cand_mail, cid)
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=N'錄取', LastContactAt=SYSDATETIME() WHERE Id=?", cand_mail, cid)
     cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', ?, ?)",
                 cid, f"錄取通知 報到 {date} {time_} @{S['name']}", u)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('hire_notice_sent', ?, ?)", cid, payload)
@@ -688,8 +675,6 @@ def _file_attachment(fp, name=None):
             "contentBytes": _b64.b64encode(open(fp, "rb").read()).decode()}
 
 def _send_mail(to, subject, body_html, attachments, cc=None):
-    if _guard_mail(to) is None:
-        return False
     tk = graph_token(); MB = env["RECRUIT_MAILBOX"]
     H = {"Authorization": "Bearer " + tk, "Content-Type": "application/json"}
     msg = {"message": {"subject": subject, "body": {"contentType": "HTML", "content": body_html},
@@ -719,9 +704,9 @@ async def hire_prepare(req: Request):
     if not c: cn.close(); raise HTTPException(404)
     if env.get("SALARY_GATE", "1") != "0" and (c.Stage or "") != "薪資已核定":
         cn.close(); return JSONResponse({"ok": False, "msg": "須先完成薪資核定（目前狀態：" + (c.Stage or "—") + "）"}, status_code=400)
-    cand_mail = _guard_mail(cand_mail or (c.Email or "").strip()) or ""
+    cand_mail = cand_mail or (c.Email or "").strip()
     if not cand_mail:
-        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有有效 Email（空白／格式錯誤／104 系統信箱），請先修正"}, status_code=400)
+        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有 Email，請先補上"}, status_code=400)
     at = secrets.token_urlsafe(18)
     cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?, 'approve', ?, DATEADD(DAY, 14, SYSDATETIME()))", at, cid)
     data = {"name": c.Name, "honorific": honor, "date": date, "time": time_, "site": site,
@@ -734,7 +719,7 @@ async def hire_prepare(req: Request):
         return JSONResponse({"ok": False, "msg": "PDF 產生失敗（docgen/pymupdf）"}, status_code=500)
     approve_url = f"http://192.168.0.69:9100/approve?t={at}"
     payload = json.dumps({**data, "pdf": pdf, "approve_token": at, "by": u}, ensure_ascii=False)
-    cur.execute("UPDATE rec.candidate SET Email=?, Stage=N'錄取簽核中', LastContactAt=SYSDATETIME() WHERE Id=?", cand_mail, cid)
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=N'錄取簽核中', LastContactAt=SYSDATETIME() WHERE Id=?", cand_mail, cid)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('hire_doc_created', ?, ?)", cid, payload)
     cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'system', 'out', ?, ?)",
                 cid, f"產生錄取文件 報到 {date} {time_}，送總經理核准", u)
@@ -945,9 +930,9 @@ async def intent(req: Request):
     cur.execute("SELECT Name, Email, JobTitle FROM rec.candidate WHERE Id=?", cid)
     c = cur.fetchone()
     if not c: cn.close(); raise HTTPException(404)
-    cand_mail = _guard_mail(cand_mail or (c.Email or "").strip()) or ""
+    cand_mail = cand_mail or (c.Email or "").strip()
     if not cand_mail:
-        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有有效 Email（空白／格式錯誤／104 系統信箱），請先修正"}, status_code=400)
+        cn.close(); return JSONResponse({"ok": False, "msg": "此應徵者沒有 Email，請先補上"}, status_code=400)
     body = f"""<div style="font-family:'Microsoft JhengHei','PingFang TC',sans-serif;font-size:15px;color:#1F2933;line-height:2">
     <p>{c.Name} {honor} 您好：</p>
     <p style="border-left:4px solid #1AA1A9;padding-left:12px">感謝您日前撥冗參與本公司「{c.JobTitle or ''}」職務甄選。經審慎評估，本公司擬予錄用，恭喜您！</p>
@@ -957,7 +942,7 @@ async def intent(req: Request):
     {_mail_footer_html()}</div>"""
     if not _send_mail(cand_mail, f"Kinetics睿普工程【錄用意向確認】{c.JobTitle or ''}｜{c.Name}", body, [_logo_attachment()]):
         cn.close(); return JSONResponse({"ok": False, "msg": "寄信失敗"}, status_code=502)
-    cur.execute("UPDATE rec.candidate SET Email=?, Stage=N'擬錄取待回覆', LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, cid)
+    cur.execute("UPDATE rec.candidate SET Email=ISNULL(Email,?), Stage=N'擬錄取待回覆', LastContactAt=SYSDATETIME(), ContactRounds=ISNULL(ContactRounds,0)+1 WHERE Id=?", cand_mail, cid)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('intent_sent', ?, ?)", cid, u)
     cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', N'錄用意向確認信', ?)", cid, u)
     cn.commit(); cn.close()

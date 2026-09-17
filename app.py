@@ -66,9 +66,11 @@ def logo(): return FileResponse(os.path.join(BASE,"static","kinetics_logo.png"))
 async def login(req: Request):
     b = await req.json()
     u, p = b.get("user","").strip(), b.get("pwd","")
-    info = ad_login(u, p) if (u and p and u in ALLOW) else None
+    if not (u and p and u in ALLOW):
+        return JSONResponse({"ok": False, "msg": "您沒有人事站使用權限，如有需要請洽數位中心"}, status_code=403)
+    info = ad_login(u, p)
     if not info:
-        return JSONResponse({"ok": False, "msg": "帳號未授權或密碼錯誤"}, status_code=403)
+        return JSONResponse({"ok": False, "msg": "帳號或密碼錯誤"}, status_code=403)
     req.session["user"] = u
     req.session["name"] = info.get("name") or u
     req.session["dept"] = info.get("department") or ""

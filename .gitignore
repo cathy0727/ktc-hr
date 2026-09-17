@@ -9,3 +9,4 @@ hire_docs/
 __pycache__/
 up_*.xlsx
 *.bak*
+retired_*.plist

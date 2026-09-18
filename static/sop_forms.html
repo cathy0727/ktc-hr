@@ -31,6 +31,12 @@ h2{font-size:17px;font-weight:800;margin:26px 0 10px;border-left:5px solid var(-
 <body>
 <div class="top"><div class="wrap">
   <h1>表單作業說明 — 人事在 9100 操作，應徵者在 9200 填表</h1>
+  <h2>整體運作 — 一券一表五步驟</h2>
+  <div class="step"><div class="n">1</div><div><b>發券</b>：人事在 9100 看板對應徵者按「調查表」或「筆試」，系統產生一次性 token 連結（3 天內有效）並自動複製。</div></div>
+  <div class="step"><div class="n">2</div><div><b>交券</b>：把連結開在 iPad 上遞給應徵者（未來開通外網後可附在邀約信）。</div></div>
+  <div class="step"><div class="n">3</div><div><b>驗券填表</b>：應徵者開連結，9200 依 token 自動帶出姓名與應徵職務並載入對應表單；無 token 或假 token 一律 404。</div></div>
+  <div class="step"><div class="n">4</div><div><b>收券作廢</b>：按送出後答卷寫回資料庫，token 當場作廢——同連結再開即失效；閒置 90 秒畫面自動清空。</div></div>
+  <div class="step"><div class="n">5</div><div><b>對帳</b>：回 9100 看板，該員「調查」晶片轉綠 ✓，按「📄 答卷」即可檢視填寫內容。</div></div>
   <p>履歷進件・調查表・筆試・報到收件・報到宣導｜連結皆一次性密令：用完即廢、逾時作廢，不怕外流</p>
 </div></div>
 <div class="wrap">

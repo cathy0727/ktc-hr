@@ -145,6 +145,70 @@ async def gen_token(req: Request):
     cn.commit(); cn.close()
     return {"ok": True, "url": f"http://192.168.0.69:9200/form?t={t}"}
 
+@app.get("/api/hr/apply/view")
+def apply_view(req: Request, id: int = 0):
+    me(req)
+    import json as _json, html as _html
+    from fastapi.responses import HTMLResponse
+    cn = db(); cur = cn.cursor()
+    cur.execute("SELECT Name, JobTitle FROM rec.candidate WHERE Id=?", id)
+    c = cur.fetchone()
+    cur.execute("SELECT TOP 1 Id, Payload FROM rec.event WHERE EventType='apply_submitted' AND CandidateId=? ORDER BY Id DESC", id)
+    ev = cur.fetchone()
+    cn.close()
+    if not c:
+        raise HTTPException(404)
+    name = _html.escape(c.Name or ""); job = _html.escape(c.JobTitle or "")
+    LB = {"agree": "個資告知同意", "jobTitle": "應徵職務", "jobSite": "工作地點",
+          "expSalary": "希望待遇", "startDate": "可上班日", "nameZh": "中文姓名",
+          "nameEn": "英文姓名", "birth": "出生年月日", "idNo": "身分證字號",
+          "mobile": "行動電話", "phone": "聯絡電話", "email": "Email",
+          "addrReg": "戶籍地址", "addrNow": "通訊地址",
+          "school": "學校", "dept": "科系", "status": "狀態", "from": "起", "to": "迄",
+          "company": "公司", "title": "職稱", "salary": "薪資", "reason": "離職原因"}
+    def lab(k): return LB.get(k, k)
+    if not ev:
+        body = "<p class='empty'>尚無已送出的調查表答卷。</p>"
+    else:
+        try:
+            data = _json.loads(ev.Payload)
+        except Exception:
+            data = {}
+        parts = []
+        for k, v in data.items():
+            if isinstance(v, list):
+                items = [x for x in v if isinstance(x, dict) and any(str(val or "").strip() for val in x.values())]
+                if not items:
+                    continue
+                keys = list(items[0].keys())
+                th = "".join("<th>" + _html.escape(lab(x)) + "</th>" for x in keys)
+                trs = "".join("<tr>" + "".join("<td>" + _html.escape(str(it.get(x, "") or "")) + "</td>" for x in keys) + "</tr>" for it in items)
+                parts.append("<div class='sec'><div class='k'>" + _html.escape(lab(k)) + "</div><table><tr>" + th + "</tr>" + trs + "</table></div>")
+            else:
+                sv = str(v or "")
+                if not sv.strip():
+                    continue
+                parts.append("<div class='row'><div class='k'>" + _html.escape(lab(k)) + "</div><div class='v'>" + _html.escape(sv) + "</div></div>")
+        body = "".join(parts) or "<p class='empty'>（空白答卷）</p>"
+    page = ("<!doctype html><html lang='zh-Hant'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>調查表答卷 - " + name + "</title><style>"
+            "body{font-family:'Noto Sans TC','PingFang TC',sans-serif;background:#F4F7F7;margin:0;padding:28px;color:#222}"
+            ".card{max-width:860px;margin:0 auto;background:#fff;border-radius:12px;padding:28px 32px;box-shadow:0 2px 10px rgba(0,0,0,.06)}"
+            "h1{font-size:20px;color:#0E7A81;margin:0 0 4px}"
+            ".sub{color:#666;font-size:14px;margin-bottom:18px;border-bottom:2px solid #0E7A81;padding-bottom:10px}"
+            ".row{display:flex;padding:7px 0;border-bottom:1px solid #F0F0F0;font-size:15px}"
+            ".row .k{width:130px;color:#888;flex:none}.row .v{flex:1;white-space:pre-wrap}"
+            ".sec{margin:16px 0}.sec .k{color:#0E7A81;font-weight:700;margin-bottom:6px}"
+            "table{border-collapse:collapse;width:100%;font-size:14px}"
+            "th,td{border:1px solid #E3E8E8;padding:6px 10px;text-align:left}th{background:#F0F6F6;color:#555}"
+            ".empty{color:#999}"
+            "</style></head><body><div class='card'>"
+            "<h1>徵選職員調查表（答卷）</h1>"
+            "<div class='sub'>" + name + "・應徵職務：" + job + "</div>"
+            + body + "</div></body></html>")
+    return HTMLResponse(page)
+
 @app.get("/api/hr/exam/sets")
 def exam_sets(req: Request):
     me(req)

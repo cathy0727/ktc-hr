@@ -256,6 +256,7 @@ function acts(c){
     ? `<button class="act" style="border-color:#8A5A00;color:#8A5A00" onclick="openInv(${c.id},'${c.name}',2)">🔁 二次面試</button>` : '';
   return h + re2 + `<button class="act" onclick="openInv(${c.id},'${c.name}')">✉ 邀約</button>
     <button class="act" onclick="tok(${c.id},'apply')">調查表</button>
+    <button class="act" onclick="window.open('/api/hr/apply/view?id=${c.id}')">📄 答卷</button>
     <button class="act" onclick="tok(${c.id},'exam')">筆試</button>
     <button class="act" style="border-color:#1A5FB4;color:#1A5FB4" onclick="sendIntent(${c.id},'${c.name}')">🌟 擬錄取</button>
     <button class="act" style="border-color:#C0392B;color:#C0392B" onclick="rejectCand(${c.id},'${c.name}')">✗ 不錄取</button>`;
@@ -462,7 +463,7 @@ async function tok(id,kind){
   const j=await r.json();
   const b=document.getElementById('urlBox');
   b.style.display='block';
-  b.innerHTML=(kind==='apply'?'調查表':'筆試')+' 連結（8 小時有效・一次性・已複製）：<a href="'+j.url+'" target="_blank" style="color:#0E7A81;font-weight:700">'+j.url+'</a> <button class="act" onclick="window.open(\''+j.url+'\')">開啟</button>';
+  b.innerHTML=(kind==='apply'?'調查表':'筆試')+' 連結（3 天內有效・一次性・已複製）：<a href="'+j.url+'" target="_blank" style="color:#0E7A81;font-weight:700">'+j.url+'</a> <button class="act" onclick="window.open(\''+j.url+'\')">開啟</button>';
   navigator.clipboard && navigator.clipboard.writeText(j.url);
 }
 async function loadSets(){

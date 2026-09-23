@@ -462,13 +462,18 @@ async def invite(req: Request):
     attendees = [{"emailAddress": {"address": cand_mail, "name": c.Name}, "type": "required"}]
     if interviewer:
         attendees.append({"emailAddress": {"address": interviewer}, "type": "required"})
+    # cc->attendees：CC 用人單位改為會議與會者（進 Teams/Outlook 行事曆）
+    _seen = {a["emailAddress"]["address"].lower() for a in attendees}
+    for x in cc:
+        if x.lower() not in _seen:
+            attendees.append({"emailAddress": {"address": x}, "type": "required"}); _seen.add(x.lower())
     ev = _rq.post(f"{_G}/users/{MB}/calendar/events", headers=H, timeout=30, json={
         "subject": f"{'複試邀請' if rnd >= 2 else '面試邀請'}｜{c.JobTitle}｜{c.Name}",
         "start": {"dateTime": start, "timeZone": "Taipei Standard Time"},
         "end": {"dateTime": end_dt.isoformat(), "timeZone": "Taipei Standard Time"},
         "location": {"displayName": location},
         "attendees": attendees,
-        "isOnlineMeeting": True, "onlineMeetingProvider": "teamsForBusiness"})
+        "hideAttendees": True, "isOnlineMeeting": True, "onlineMeetingProvider": "teamsForBusiness"})
     join = ""
     if ev.status_code < 300:
         join = (ev.json().get("onlineMeeting") or {}).get("joinUrl", "")
@@ -509,7 +514,7 @@ async def invite(req: Request):
         "subject": f"Kinetics睿普工程【{c.JobTitle}】面試邀請_{date.replace('-','')}(星期{wd}) {time_} {c.Name}",
         "body": {"contentType": "HTML", "content": body_html},
         "toRecipients": [{"emailAddress": {"address": cand_mail}}],
-        "ccRecipients": [{"emailAddress": {"address": x}} for x in cc],
+        "ccRecipients": [],
         "attachments": [{
             "@odata.type": "#microsoft.graph.fileAttachment",
             "name": "kinetics_logo.png", "contentType": "image/png",

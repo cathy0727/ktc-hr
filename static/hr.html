@@ -186,7 +186,7 @@ async function openInv(id, name, round){
   document.getElementById('invInt').value = j.interviewer || localStorage.getItem('inv_int') || '';
   document.getElementById('invCc').value = j.cc || '';
   const box = document.getElementById('ccPick');
-  box.innerHTML = (j.known || []).map(m =>
+  box.innerHTML = /*ccpick-filter*/[...new Set((j.known || []).map(x=>String(x).trim().toLowerCase()).filter(x=>/^[^@\s]+@kinetics\.com\.tw$/.test(x)))].sort().map(m =>
     `<span onclick="addCc('${m}')" style="cursor:pointer;background:#E8F4F5;color:#0E7A81;border-radius:12px;padding:2px 10px;font-size:12px;margin-right:6px;display:inline-block;margin-top:4px">＋ ${m}</span>`).join('');
   // 日期預設：明天（週六日自動跳週一）
   const d = new Date(); d.setDate(d.getDate() + 1);

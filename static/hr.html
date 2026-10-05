@@ -50,7 +50,7 @@ body.ro .drop{pointer-events:none;}
     <div class="newrow rwonly">
       <select id="nCorp"><option>KTC</option><option>KIC</option><option>CTC</option></select>
       <input id="nName" placeholder="姓名" style="width:140px">
-      <input id="nJob" placeholder="應徵職務（含職能字自動對卷）" style="width:260px">
+      <input id="nJob" placeholder="應徵職務" style="width:260px">
       <input id="nMail" placeholder="Email（選填）" style="width:200px">
       <button class="pri" onclick="addCand()">建立</button>
     </div>
@@ -147,11 +147,11 @@ body.ro .drop{pointer-events:none;}
 </div>
 <div class="pg" id="p-exam">
   <div class="card">
-    <h2>職能題庫<span style="font-size:12px;color:var(--soft);font-weight:400">應徵職務含職能字自動對卷・上傳整卷覆蓋・新職能自動開卷</span></h2>
-    <table><thead><tr><th>職能（對卷關鍵字）</th><th>卷名</th><th>題數</th><th>作答分鐘</th><th style="width:60px"></th></tr></thead>
+    <h2>職能題庫<span style="font-size:12px;color:var(--soft);font-weight:400">產筆試連結時由人事選卷・上傳整卷覆蓋・新職能自動開卷</span></h2>
+    <table><thead><tr><th>職能</th><th>卷名</th><th>題數</th><th>作答分鐘</th><th style="width:60px"></th></tr></thead>
     <tbody id="setRows"><tr><td colspan="4">載入中…</td></tr></tbody></table>
-    <div class="drop rwonly" onclick="document.getElementById('exF').click()"><span id="exName">點此選擇題庫檔上傳匯入（Excel 範本／Word・PDF 由 AI 解析）</span></div>
-    <input type="file" id="exF" accept=".xlsx,.docx,.pdf" style="display:none" onchange="upExam()">
+    <div class="drop rwonly" onclick="document.getElementById('exF').click()"><span id="exName">點此選擇題庫檔上傳匯入（Excel 範本（.xlsx/.xls）／Word・PDF 由 AI 解析）</span></div>
+    <input type="file" id="exF" accept=".xlsx,.xls,.docx,.pdf" style="display:none" onchange="upExam()">
     <div style="margin-top:10px;text-align:right" class="rwonly"><button class="act" onclick="clearExam()">🗑 清空全部題庫</button></div>
     <div id="exMsg"></div>
   </div>
@@ -458,10 +458,12 @@ async function addCand(){
     body:JSON.stringify({name,job,corp:document.getElementById('nCorp').value,email:document.getElementById('nMail').value.trim()})});
   document.getElementById('nName').value='';document.getElementById('nJob').value='';document.getElementById('nMail').value='';loadCand();
 }
-async function tok(id,kind){
+async function tok(id,kind,jf){
+  if(kind==='exam' && !jf){ return pickSet(id); }
   const r=await fetch('/api/hr/token',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({id,kind})});
-  const j=await r.json();
+    body:JSON.stringify({id,kind,jf:jf||''})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok || !j.url){ alert('產生連結失敗：'+(j.detail||('HTTP '+r.status))); return; }
   const b=document.getElementById('urlBox');
   b.style.display='block';
   b.innerHTML=(kind==='apply'?'調查表':'筆試')+' 連結（3 天內有效・一次性・已複製）：<a href="'+j.url+'" target="_blank" style="color:#0E7A81;font-weight:700">'+j.url+'</a> <button class="act" onclick="window.open(\''+j.url+'\')">開啟</button>';
@@ -510,7 +512,7 @@ async function upExam(){
     if(jf.trim()) url+='?jf='+encodeURIComponent(jf.trim());
   }
   const m=document.getElementById('exMsg');
-  m.textContent=(ext==='xlsx')?'匯入中…（範本直接匯入；非範本自動轉 AI 解析，約 30～60 秒）':'AI 解析中…（Word/PDF 約需 30～60 秒）'; m.className='';
+  m.textContent=((ext==='xlsx'||ext==='xls'))?'匯入中…（範本直接匯入；非範本自動轉 AI 解析，約 30～60 秒）':'AI 解析中…（Word/PDF 約需 30～60 秒）'; m.className='';
   const fd=new FormData(); fd.append('file',f);
   try{
     const r=await fetch(url,{method:'POST',body:fd});
@@ -529,5 +531,32 @@ async function clearExam(){
   const j=await r.json();
   m.textContent=j.ok?'✓ '+j.msg:'✗ '+(j.msg||'失敗'); m.className=j.ok?'ok':'err';
   loadSets();
+}
+/* exampick：筆試選卷 */
+async function pickSet(id){
+  const r=await fetch('/api/hr/exam/sets'); const j=await r.json().catch(()=>({}));
+  const sets=(j&&j.sets)||[];
+  if(!sets.length){ alert('題庫是空的，請先到「題庫管理」上傳試卷'); return; }
+  const h=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let m=document.getElementById('pickBox');
+  if(!m){ m=document.createElement('div'); m.id='pickBox'; document.body.appendChild(m); }
+  m.style.cssText='position:fixed;inset:0;background:rgba(29,32,136,.25);display:flex;align-items:center;justify-content:center;z-index:9999';
+  m.innerHTML='<div style="background:#fff;border-radius:10px;padding:20px 24px;width:380px;max-width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.2)">'
+    +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">選擇筆試試卷</div>'
+    +'<div style="font-size:12px;color:#666;margin-bottom:12px">產出的連結只會考這份卷</div>'
+    +'<select id="pickSel" style="width:100%;padding:8px;font-size:14px;border:1px solid #ccc;border-radius:6px">'
+    +'<option value="">— 請選擇 —</option>'
+    +sets.map(s=>'<option value="'+h(s.jf)+'">'+h(s.jf)+(s.title?'｜'+h(s.title):'')+'</option>').join('')
+    +'</select><div style="text-align:right;margin-top:16px">'
+    +'<button class="act" id="pickNo" style="margin-right:8px">取消</button>'
+    +'<button class="act" id="pickGo" style="background:#1AA1A9;color:#fff;border-color:#1AA1A9">產生連結</button>'
+    +'</div></div>';
+  document.getElementById('pickNo').onclick=()=>m.remove();
+  m.onclick=e=>{ if(e.target===m) m.remove(); };
+  document.getElementById('pickGo').onclick=()=>{
+    const v=document.getElementById('pickSel').value;
+    if(!v){ alert('請先選擇試卷'); return; }
+    m.remove(); tok(id,'exam',v);
+  };
 }
 </script></body></html>

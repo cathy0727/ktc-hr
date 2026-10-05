@@ -137,11 +137,23 @@ async def gen_token(req: Request):
     u = me_rw(req); b = await req.json()
     cid, kind = int(b.get("id",0)), b.get("kind","")
     if kind not in ("apply","exam") or not cid: raise HTTPException(400)
+    jf_pick = (b.get("jf") or "").strip()  # exampick
+    if kind == "exam":
+        if not jf_pick: raise HTTPException(400, "請選擇試卷")
+        cn0 = db(); c0 = cn0.cursor()
+        c0.execute("SELECT Id FROM rec.exam_set WHERE JobFunction=?", jf_pick)
+        r0 = c0.fetchone()
+        if not r0:
+            cn0.close(); raise HTTPException(400, "找不到此試卷，請重新整理")
+        c0.execute("UPDATE rec.interview SET ExamSetId=? WHERE CandidateId=?", r0.Id, cid)
+        if c0.rowcount == 0:
+            cn0.close(); raise HTTPException(400, "此應徵者尚無面試紀錄，無法指定試卷")
+        cn0.commit(); cn0.close()
     t = secrets.token_urlsafe(18)
     cn = db(); cur = cn.cursor()
     cur.execute("INSERT INTO rec.form_token(Token, Kind, RefId, ExpiresAt) VALUES(?,?,?,DATEADD(DAY,3,SYSDATETIME()))",
                 t, kind, cid)
-    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('token_issued',?,?)", cid, kind+" by "+u)
+    cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('token_issued',?,?)", cid, kind+(" ["+jf_pick+"]" if kind=="exam" else "")+" by "+u)
     cn.commit(); cn.close()
     return {"ok": True, "url": f"http://192.168.0.69:9200/form?t={t}"}
 
@@ -328,15 +340,37 @@ def _parse_exam_ai(tmp, ext, jf_hint, title_hint, tmin_hint, fname=""):
     except Exception: tmin = 60
     return {jf: {"title": title, "tmin": tmin, "qs": qs}}, skipped
 
+# exampick: 舊版 .xls 轉 .xlsx（上傳後立即轉，範本/AI 解析一律吃 .xlsx）
+def _xls_to_xlsx(tmp):
+    import xlrd, openpyxl, re as _re
+    book = xlrd.open_workbook(tmp)
+    wb = openpyxl.Workbook(); wb.remove(wb.active)
+    for sh in book.sheets():
+        ws = wb.create_sheet(_re.sub(r"[\[\]:*?/\\]", "_", sh.name or "Sheet")[:31])
+        for r in range(sh.nrows):
+            ws.append([int(v) if isinstance(v, float) and v.is_integer() else v for v in sh.row_values(r)])
+    if not wb.sheetnames:
+        wb.create_sheet("Sheet")
+    x = os.path.join(BASE, "up_" + secrets.token_hex(4) + ".xlsx")
+    wb.save(x)
+    return x
+
 @app.post("/api/hr/exam/upload")
 async def exam_upload(req: Request, file: UploadFile = File(...)):
     u = me_rw(req)
     fname = (file.filename or "").lower()
     ext = fname.rsplit(".", 1)[-1] if "." in fname else ""
-    if ext not in ("xlsx", "docx", "pdf"):
-        return JSONResponse({"ok": False, "msg": "只收 .xlsx / .docx / .pdf"}, status_code=400)
+    if ext not in ("xlsx", "xls", "docx", "pdf"):
+        return JSONResponse({"ok": False, "msg": "只收 .xlsx / .xls / .docx / .pdf"}, status_code=400)
     tmp = os.path.join(BASE, "up_" + secrets.token_hex(4) + "." + ext)
     with open(tmp, "wb") as f: f.write(await file.read())
+    if ext == "xls":  # exampick
+        try:
+            _x = _xls_to_xlsx(tmp)
+        except Exception:
+            os.remove(tmp)
+            return JSONResponse({"ok": False, "msg": ".xls 讀取失敗，請確認檔案未損壞或另存為 .xlsx"}, status_code=400)
+        os.remove(tmp); tmp, ext = _x, "xlsx"
     qp = req.query_params
     try:
         _hints = ((qp.get("jf") or "").strip() or None,

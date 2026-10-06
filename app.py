@@ -501,7 +501,11 @@ async def invite(req: Request):
     for x in cc:
         if x.lower() not in _seen:
             attendees.append({"emailAddress": {"address": x}, "type": "required"}); _seen.add(x.lower())
-    ev = _rq.post(f"{_G}/users/{MB}/calendar/events", headers=H, timeout=30, json={
+    # invmode：地點含「線上/Teams」才建 Teams 會議；實體面試改以密件副本寄邀請信給面試官與 CC
+    _online = ("線上" in location) or ("teams" in location.lower())
+    _bcc = [] if _online else [x["emailAddress"]["address"] for x in attendees[1:]]
+    class _NoEv: status_code = 999
+    ev = (_rq.post if _online else (lambda *_a, **_k: _NoEv()))(f"{_G}/users/{MB}/calendar/events", headers=H, timeout=30, json={
         "subject": f"{'複試邀請' if rnd >= 2 else '面試邀請'}｜{c.JobTitle}｜{c.Name}",
         "start": {"dateTime": start, "timeZone": "Taipei Standard Time"},
         "end": {"dateTime": end_dt.isoformat(), "timeZone": "Taipei Standard Time"},
@@ -548,7 +552,7 @@ async def invite(req: Request):
         "subject": f"Kinetics睿普工程【{c.JobTitle}】面試邀請_{date.replace('-','')}(星期{wd}) {time_} {c.Name}",
         "body": {"contentType": "HTML", "content": body_html},
         "toRecipients": [{"emailAddress": {"address": cand_mail}}],
-        "ccRecipients": [],
+        "ccRecipients": [], "bccRecipients": [{"emailAddress": {"address": x}} for x in _bcc],
         "attachments": [{
             "@odata.type": "#microsoft.graph.fileAttachment",
             "name": "kinetics_logo.png", "contentType": "image/png",
@@ -570,7 +574,7 @@ async def invite(req: Request):
         WHEN NOT MATCHED THEN INSERT(CorporationId, JobTitle, InterviewerMail, CcEmails) VALUES('KTC', s.JobTitle, ?, ?);""",
         c.JobTitle, interviewer, ",".join(cc), interviewer, ",".join(cc))
     cur.execute("INSERT INTO rec.contact_log(CandidateId, Channel, Direction, Summary, Actor) VALUES(?, 'email', 'out', ?, ?)",
-                cid, f"面試邀請 {date} {time_} CC:{','.join(cc) or '無'}", u)
+                cid, f"面試邀請({'線上' if _online else '實體'}) {date} {time_} CC:{','.join(cc) or '無'}", u)
     cur.execute("INSERT INTO rec.event(EventType, CandidateId, Payload) VALUES('invite_sent', ?, ?)", cid, f"round{rnd} {date} {time_}")
     cn.commit(); cn.close()
     return {"ok": True, "teams": bool(join)}
